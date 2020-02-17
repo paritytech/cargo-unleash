@@ -1,5 +1,7 @@
 mod de_dev_deps;
 use crate::cli::{Command, Opt};
+use flexi_logger::Logger;
+use log::trace;
 use std::{
     error::Error,
     fs,
@@ -16,9 +18,8 @@ where
         .parent()
         .expect("Was abe to read the file, there must be a directory. qed");
     let mut doc: Document = content.parse()?;
-    println!("found first");
     let _ = f(&mut doc, &manifest_path)?;
-    println!("reading members");
+    trace!("reading members of {:?}", manifest_path);
     let members = {
         if let Some(Item::Table(workspace)) = doc.as_table().get("workspace") {
             if let Some(Item::Value(Value::Array(members))) = workspace.get("members") {
@@ -34,21 +35,21 @@ where
         }
     };
 
-    println!("Members: {:?}", members);
+    trace!("Members found: {:?}", members);
 
     for m in members {
         let filename = base_path.join(m).join("Cargo.toml");
-        println!("runing on {:?}", filename);
+        trace!("Running on {:?}", filename);
         let mut doc: Document = fs::read_to_string(&filename)?.parse()?;
         let _ = f(&mut doc, &filename)?;
     }
-
-    println!("Done.");
 
     Ok(())
 }
 
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
+    let _ = Logger::with_str(args.log).start();
+
     let manifest_path = {
         let mut path = args.manifest_path;
         if path.is_dir() {
@@ -57,7 +58,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         path
     };
 
-    println!("Trying {:?}", &manifest_path);
+    trace!("Uising manifest {:?}", &manifest_path);
     match args.cmd {
         Command::DeDevDeps => {
             run_recursive(manifest_path, de_dev_deps::deactivate_dev_dependencies)
