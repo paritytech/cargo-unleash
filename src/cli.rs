@@ -17,7 +17,7 @@ pub enum Command {
         #[structopt(long, parse(from_str))]
         skip: Vec<InternedString>,
         /// ignore version pre-releases, comma separated
-        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev git master")]
+        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
         ignore_version_pre: Vec<Identifier>,
     }
 }

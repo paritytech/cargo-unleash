@@ -9,11 +9,11 @@ use petgraph::Graph;
 use log::{trace, warn};
 
 /// Generate the packages we should be releasing
-pub fn packages_to_release<'a, F>(ws: Workspace<'a>, skip: F) -> Result<Vec<Package>, String>
+pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, skip: F) -> Result<Vec<Package>, String>
     where F: Fn(&Package) -> bool
 {
     // based on the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
-    ws.config().shell().status("Resolving", "workspace").expect("Writing to Shell failed");
+    ws.config().shell().status("Resolving", "Dependency Tree").expect("Writing to Shell failed");
 
     let mut graph = Graph::<Package, (), _, _>::new();
     let mut map = HashMap::new();

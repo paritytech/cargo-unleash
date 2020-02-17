@@ -10,6 +10,8 @@ use std::{
 };
 use cargo::{util::config::Config as CargoConfig, core::{package::Package, Workspace}};
 use toml_edit::{Document, Item, Value};
+use cargo::core::InternedString;
+use semver::Identifier;
 
 fn run_recursive<F>(manifest_path: PathBuf, f: F) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -49,41 +51,53 @@ where
     Ok(())
 }
 
+fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<InternedString>, ignore_version_pre: Vec<Identifier>)
+    -> Result<Vec<Package>, String>
+{
+    let skipper = |p: &Package| {
+        if let Some(false) = p.publish().as_ref().map(|v| v.is_empty()) {
+            trace!("Skipping {} because it shouldn't be published", p.name());
+            return true
+        }
+        if skip.contains(&p.name()) {
+            return true
+        }
+        if p.version().is_prerelease() {
+            for pre in &p.version().pre {
+                if ignore_version_pre.contains(&pre) {
+                    return true
+                }
+            }
+        }
+        false
+    };
+    to_release::packages_to_release(ws, skipper)
+}
+
 fn _run(cmd: Command, root_manifest: PathBuf) -> Result<(), Box<dyn Error>> {
+    let c = CargoConfig::default().expect("Couldn't create cargo config");
     match cmd {
         Command::DeDevDeps => {
             run_recursive(root_manifest, de_dev_deps::deactivate_dev_dependencies)
         }
         Command::ToRelease { skip, ignore_version_pre } => {
-            let c = CargoConfig::default().expect("Couldn't create cargo config");
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let skipper = |p: &Package| {
-                if let Some(false) = p.publish().as_ref().map(|v| v.is_empty()) {
-                    trace!("Skipping {} because it shouldn't be published", p.name());
-                    return true
-                }
-                if skip.contains(&p.name()) {
-                    return true
-                }
-                if p.version().is_prerelease() {
-                    for pre in &p.version().pre {
-                        if ignore_version_pre.contains(&pre) {
-                            return true
-                        }
-                    }
-                }
-                false
-            };
-            let packages = to_release::packages_to_release(ws, skipper)?;
-            println!("{:?}", packages.iter().map(|p| p.name()).collect::<Vec<_>>());
+            let packages = to_release(&ws, skip,  ignore_version_pre)?;
+            println!("{:}", packages
+                .iter()
+                    .map(|p| format!("{} ({})", p.name(), p.version()))
+                .collect::<Vec<String>>()
+                .join(", ")
+            );
             Ok(())
         }
     }
 }
 
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
-    let _ = Logger::with_str(args.log).start();
+    let _ = Logger::with_str(args.log.clone()).start();
+    trace!("Running with config {:?}", args);
     let manifest_path = {
         let mut path = args.manifest_path;
         if path.is_dir() {
