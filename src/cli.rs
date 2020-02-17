@@ -1,10 +1,25 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
+use cargo::core::InternedString;
+use semver::Identifier;
+
+fn parse_identifiers(src: &str) -> Identifier {
+    Identifier::AlphaNumeric(src.to_owned())
+}
 
 #[derive(StructOpt, Debug)]
 pub enum Command {
-    // deactivate the development dependencies
+    /// deactivate the development dependencies
     DeDevDeps,
+    /// calculate the packages that should be released, in the order they should be released
+    ToRelease {
+        /// skip the packages named ...
+        #[structopt(long, parse(from_str))]
+        skip: Vec<InternedString>,
+        /// ignore version pre-releases, comma separated
+        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev git master")]
+        ignore_version_pre: Vec<Identifier>,
+    }
 }
 
 #[derive(Debug, StructOpt)]
