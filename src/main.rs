@@ -1,12 +1,10 @@
-use std::{env, error::Error, fs};
+use std::error::Error;
+use structopt::StructOpt;
+mod cli;
+mod commands;
+
+use cli::Opt;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    for file in env::args().skip(1) {
-        let content = fs::read_to_string(&file)?;
-        let mut doc: toml_edit::Document = content.parse()?;
-        doc.as_table_mut().remove("dev-dependencies");
-        fs::write(file, doc.to_string())?;
-    }
-
-    Ok(())
+    commands::run(Opt::from_args())
 }
