@@ -200,6 +200,7 @@ dependencies = [
  "flexi_logger",
  "log",
  "petgraph",
+ "regex",
  "semver",
  "structopt",
  "tar",

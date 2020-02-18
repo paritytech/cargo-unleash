@@ -4,7 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
-use cargo::core::InternedString;
 use semver::Identifier;
 use toml_edit::{Document, Item, Value};
 use cargo::{
@@ -15,12 +14,18 @@ use cargo::{
     },
 };
 use flexi_logger::Logger;
+use regex::Regex;
 use log::trace;
 
 fn parse_identifiers(src: &str) -> Identifier {
     Identifier::AlphaNumeric(src.to_owned())
 }
+fn parse_regex(src: &str) -> Result<Regex, String> {
+    Regex::new(src)
+        .map_err(|e| format!("Parsing Regex failed: {:}", e))
+}
 use crate::commands;
+
 
 #[derive(StructOpt, Debug)]
 pub enum Command {
@@ -29,14 +34,17 @@ pub enum Command {
     /// calculate the packages that should be released, in the order they should be released
     ToRelease {
         /// skip the packages named ...
-        #[structopt(long, parse(from_str))]
-        skip: Vec<InternedString>,
+        #[structopt(long, parse(try_from_str = parse_regex))]
+        skip: Vec<Regex>,
         /// ignore version pre-releases, comma separated
         #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
         ignore_version_pre: Vec<Identifier>,
     },
     /// Unleash 'em dragons 
     Em {
+        /// skip the packages named ...
+        #[structopt(long, parse(try_from_str = parse_regex))]
+        skip: Vec<Regex>,
         /// ignore version pre-releases, comma separated
         #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
         ignore_version_pre: Vec<Identifier>,
@@ -108,7 +116,7 @@ where
     Ok(())
 }
 
-fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<InternedString>, ignore_version_pre: Vec<Identifier>)
+fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<Regex>, ignore_version_pre: Vec<Identifier>)
     -> Result<Vec<Package>, String>
 {
     let skipper = |p: &Package| {
@@ -116,7 +124,8 @@ fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<InternedString>, ignore_version_
             trace!("Skipping {} because it shouldn't be published", p.name());
             return true
         }
-        if skip.contains(&p.name()) {
+        let name = p.name();
+        if skip.iter().find(|r| r.is_match(&name)).is_some() {
             return true
         }
         if p.version().is_prerelease() {
@@ -131,11 +140,11 @@ fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<InternedString>, ignore_version_
     commands::packages_to_release(ws, skipper)
 }
 
-fn release<'a>(ws: Workspace<'a>, dry_run:bool, token: Option<String>, ignore_version_pre: Vec<Identifier>)
+fn release<'a>(ws: Workspace<'a>, dry_run:bool, token: Option<String>, skip: Vec<Regex>, ignore_version_pre: Vec<Identifier>)
     -> Result<(), Box<dyn Error>>
 {
 
-    let packages = to_release(&ws, Vec::new(), ignore_version_pre)?;
+    let packages = to_release(&ws, skip, ignore_version_pre)?;
 
     ws.config().shell().status("Releasing", &packages
         .iter()
@@ -166,14 +175,14 @@ fn _run(args: Opt, root_manifest: PathBuf) -> Result<(), Box<dyn Error>> {
             );
             Ok(())
         }
-        Command::Em { dry_run, token, ignore_version_pre } => {
+        Command::Em { dry_run, skip, token, ignore_version_pre } => {
             c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
             // we first disable dev-dependencies
             run_recursive(root_manifest.clone(), commands::deactivate_dev_dependencies)?;
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            release(ws, dry_run, token, ignore_version_pre)
+            release(ws, dry_run, token, skip, ignore_version_pre)
         }
     }
 }
