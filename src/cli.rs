@@ -136,6 +136,13 @@ fn release<'a>(ws: Workspace<'a>, dry_run:bool, token: Option<String>, ignore_ve
 {
 
     let packages = to_release(&ws, Vec::new(), ignore_version_pre)?;
+
+    ws.config().shell().status("Releasing", &packages
+        .iter()
+        .map(|p| format!("{} ({})", p.name(), p.version()))
+        .collect::<Vec<String>>()
+        .join(", ")
+    )?;
     commands::release(packages, ws, dry_run, token)
 }
 

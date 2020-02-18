@@ -41,7 +41,7 @@ fn inject_replacement(pkg: &Package, replace: &[(String, String)]) -> Result<(),
 }
 
 
-fn run_verify(
+fn run_check(
     ws: &Workspace<'_>,
     tar: &FileLock,
     opts: &PackageOpts<'_>,
@@ -49,8 +49,6 @@ fn run_verify(
 ) -> Result<(), Box<dyn Error>> {
     let config = ws.config();
     let pkg = ws.current()?;
-
-    config.shell().status("Verifying", pkg)?;
 
     let f = GzDecoder::new(tar.file());
     let dst = tar
@@ -102,7 +100,7 @@ fn run_verify(
         &ws,
         &ops::CompileOptions {
             config,
-            build_config: BuildConfig::new(config, opts.jobs, &opts.target, CompileMode::Build)?,
+            build_config: BuildConfig::new(config, opts.jobs, &opts.target, CompileMode::Check { test: false })?,
             features: opts.features.clone(),
             no_default_features: opts.no_default_features,
             all_features: opts.all_features,
@@ -151,22 +149,24 @@ pub fn release<'a>(
 
     let opts = PackageOpts {
         config: c, verify: false, check_metadata: true, list: false,
-        allow_dirty: true, all_features: true, no_default_features: false,
+        allow_dirty: true, all_features: false, no_default_features: false,
         jobs: None, target: None, features: Vec::new(),
     };
 
-    c.shell().status("Verifying", "Packages")?;
+    c.shell().status("Preparing", "Packages")?;
     for pkg in &packages {
         let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)?;
         c.shell().status("Packing", &pkg)?;
         let rw_lock = package(&pkg_ws, &opts)?
             .ok_or_else(|| format!("Failure packing {:}", pkg.name()))?;
-        run_verify(&pkg_ws, &rw_lock, &opts, &replaces)?;
+        c.shell().status("Verfying", pkg)?;
+        run_check(&pkg_ws, &rw_lock, &opts, &replaces)?;
+        c.shell().status("Checking", "✔️")?;
     }
 
     let opts = PublishOpts {
         verify: false, token, dry_run, config: c,
-        allow_dirty: true, all_features: true, no_default_features: false,
+        allow_dirty: true, all_features: false, no_default_features: false,
         index: None, jobs: None, target: None, registry: None, features: Vec::new(),
     };
 
