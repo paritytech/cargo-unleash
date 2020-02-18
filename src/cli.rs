@@ -11,11 +11,7 @@ use cargo::{
     util::config::Config as CargoConfig,
     core::{
         package::Package,
-        Workspace, Verbosity
-    },
-    ops::{
-        publish, PublishOpts,
-        package, PackageOpts,
+        Verbosity, Workspace
     },
 };
 use flexi_logger::Logger;
@@ -47,9 +43,6 @@ pub enum Command {
         /// dry run
         #[structopt(long="dry-run")]
         dry_run: bool,
-        /// verify the build
-        #[structopt(long)]
-        no_verify: bool,
         // the token to use for uploading
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>
@@ -68,6 +61,9 @@ pub struct Opt {
     /// Specify the log levels
     #[structopt(long = "log-level", short = "l", default_value = "warn")]
     pub log: String,
+    /// Show verbose cargo output
+    #[structopt(long = "verbose", short = "v")]
+    pub verbose: bool,
 
     #[structopt(subcommand)]
     pub cmd: Command,
@@ -135,54 +131,18 @@ fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<InternedString>, ignore_version_
     commands::packages_to_release(ws, skipper)
 }
 
-fn quiet<'a, R, F: Fn() -> Result<R, Box<dyn Error>>> (c: &'a CargoConfig, f: F) -> Result<R, Box<dyn Error>> {
-    let before = c.shell().verbosity();
-    c.shell().set_verbosity(Verbosity::Normal);
-    let r = f();
-    c.shell().set_verbosity(before);
-    r
-}
-
-fn release<'a>(ws: Workspace<'a>, dry_run:bool, verify:bool, token: Option<String>, ignore_version_pre: Vec<Identifier>)
+fn release<'a>(ws: Workspace<'a>, dry_run:bool, token: Option<String>, ignore_version_pre: Vec<Identifier>)
     -> Result<(), Box<dyn Error>>
 {
 
-    let c = ws.config();
     let packages = to_release(&ws, Vec::new(), ignore_version_pre)?;
-
-    if verify {
-        let opts = PackageOpts {
-            config: c, verify, check_metadata: true, list: false,
-            allow_dirty: true, all_features: true, no_default_features: false,
-            jobs: None, target: None, features: Vec::new(),
-        };
-
-        c.shell().status("Verifying", "Packages")?;
-        for pkg in &packages {
-            let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)?;
-            c.shell().status("Packing", pkg.name())?;
-            quiet(c, || package(&pkg_ws, &opts).map_err(|e| e.into()))?;
-        }
-    }
-
-    let opts = PublishOpts {
-        verify: false, token, dry_run, config: c,
-        allow_dirty: true, all_features: true, no_default_features: false,
-        index: None, jobs: None, target: None, registry: None, features: Vec::new(),
-    };
-
-    c.shell().status("Publishing", "Packages")?;
-    for pkg in packages {
-        let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)?;
-        c.shell().status("Publishing", pkg.name())?;
-        quiet(c, || publish(&pkg_ws, &opts).map_err(|e| e.into()))?;
-    }
-    Ok(())
+    commands::release(packages, ws, dry_run, token)
 }
 
-fn _run(cmd: Command, root_manifest: PathBuf) -> Result<(), Box<dyn Error>> {
+fn _run(args: Opt, root_manifest: PathBuf) -> Result<(), Box<dyn Error>> {
     let c = CargoConfig::default().expect("Couldn't create cargo config");
-    match cmd {
+    c.shell().set_verbosity(if args.verbose { Verbosity::Verbose }  else { Verbosity::Normal });
+    match args.cmd {
         Command::DeDevDeps => {
             c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
             run_recursive(root_manifest, commands::deactivate_dev_dependencies)
@@ -199,14 +159,14 @@ fn _run(cmd: Command, root_manifest: PathBuf) -> Result<(), Box<dyn Error>> {
             );
             Ok(())
         }
-        Command::Em { dry_run, no_verify, token, ignore_version_pre } => {
+        Command::Em { dry_run, token, ignore_version_pre } => {
             c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
             // we first disable dev-dependencies
             run_recursive(root_manifest.clone(), commands::deactivate_dev_dependencies)?;
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            release(ws, dry_run, !no_verify, token, ignore_version_pre)
+            release(ws, dry_run, token, ignore_version_pre)
         }
     }
 }
@@ -215,7 +175,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     let _ = Logger::with_str(args.log.clone()).start();
     trace!("Running with config {:?}", args);
     let manifest_path = {
-        let mut path = args.manifest_path;
+        let mut path = args.manifest_path.clone();
         if path.is_dir() {
             path = path.join("Cargo.toml")
         }
@@ -223,5 +183,5 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     };
 
     trace!("Using manifest {:?}", &manifest_path);
-    _run(args.cmd, manifest_path)
+    _run(args, manifest_path)
 }
