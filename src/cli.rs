@@ -33,7 +33,7 @@ pub enum Command {
     DeDevDeps,
     /// calculate the packages that should be released, in the order they should be released
     ToRelease {
-        /// skip the packages named ...
+        /// skip the package names matching ...
         #[structopt(long, parse(try_from_str = parse_regex))]
         skip: Vec<Regex>,
         /// ignore version pre-releases, comma separated
@@ -42,7 +42,7 @@ pub enum Command {
     },
     /// Unleash 'em dragons 
     Em {
-        /// skip the packages named ...
+        /// skip the package names matching ...
         #[structopt(long, parse(try_from_str = parse_regex))]
         skip: Vec<Regex>,
         /// ignore version pre-releases, comma separated
@@ -59,7 +59,7 @@ pub enum Command {
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "carg-unleash",
+    name = "cargo-unleash",
     about = "Release the crates of this massiv monorepo"
 )]
 pub struct Opt {
