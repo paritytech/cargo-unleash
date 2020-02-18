@@ -1,21 +1,18 @@
 use std::{
     error::Error,
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use structopt::StructOpt;
 use semver::Identifier;
-use toml_edit::{Document, Item, Value};
 use cargo::{
     util::config::Config as CargoConfig,
     core::{
-        package::Package,
         Verbosity, Workspace
     },
 };
 use flexi_logger::Logger;
 use regex::Regex;
-use log::trace;
 
 fn parse_identifiers(src: &str) -> Identifier {
     Identifier::AlphaNumeric(src.to_owned())
@@ -39,9 +36,27 @@ pub enum Command {
         /// ignore version pre-releases, comma separated
         #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
         ignore_version_pre: Vec<Identifier>,
+        /// Do not disable dev-dependencies
+        #[structopt(long="include-dev-deps")]
+        include_dev: bool,
+    },
+    /// Check packages
+    Check {
+        /// skip the package names matching ...
+        #[structopt(long, parse(try_from_str = parse_regex))]
+        skip: Vec<Regex>,
+        /// ignore version pre-releases, comma separated
+        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers))]
+        ignore_version_pre: Vec<Identifier>,
+        /// Do not disable dev-dependencies
+        #[structopt(long="include-dev-deps")]
+        include_dev: bool,
     },
     /// Unleash 'em dragons 
     Em {
+        /// Do not disable dev-dependencies
+        #[structopt(long="include-dev-deps")]
+        include_dev: bool,
         /// skip the package names matching ...
         #[structopt(long, parse(try_from_str = parse_regex))]
         skip: Vec<Regex>,
@@ -77,127 +92,79 @@ pub struct Opt {
     pub cmd: Command,
 }
 
-
-fn run_recursive<F>(manifest_path: PathBuf, f: F) -> Result<(), Box<dyn std::error::Error>>
-where
-    F: Fn(&mut Document, &Path) -> Result<(), Box<dyn std::error::Error>>,
-{
-    let content = fs::read_to_string(&manifest_path)?;
-    let base_path = manifest_path
-        .parent()
-        .expect("Was abe to read the file, there must be a directory. qed");
-    let mut doc: Document = content.parse()?;
-    let _ = f(&mut doc, &manifest_path)?;
-    trace!("reading members of {:?}", manifest_path);
-    let members = {
-        if let Some(Item::Table(workspace)) = doc.as_table().get("workspace") {
-            if let Some(Item::Value(Value::Array(members))) = workspace.get("members") {
-                members
-                    .iter()
-                    .filter_map(|m| m.as_str())
-                    .collect::<Vec<_>>()
-            } else {
-                return Err(format!("Members not found in {:?}", &manifest_path).into());
-            }
-        } else {
-            vec![]
-        }
-    };
-
-    trace!("Members found: {:?}", members);
-
-    for m in members {
-        let filename = base_path.join(m).join("Cargo.toml");
-        trace!("Running on {:?}", filename);
-        let mut doc: Document = fs::read_to_string(&filename)?.parse()?;
-        let _ = f(&mut doc, &filename)?;
-    }
-
-    Ok(())
-}
-
-fn to_release<'a>(ws: &Workspace<'a>, skip: Vec<Regex>, ignore_version_pre: Vec<Identifier>)
-    -> Result<Vec<Package>, String>
-{
-    let skipper = |p: &Package| {
-        if let Some(false) = p.publish().as_ref().map(|v| v.is_empty()) {
-            trace!("Skipping {} because it shouldn't be published", p.name());
-            return true
-        }
-        let name = p.name();
-        if skip.iter().find(|r| r.is_match(&name)).is_some() {
-            return true
-        }
-        if p.version().is_prerelease() {
-            for pre in &p.version().pre {
-                if ignore_version_pre.contains(&pre) {
-                    return true
-                }
-            }
-        }
-        false
-    };
-    commands::packages_to_release(ws, skipper)
-}
-
-fn release<'a>(ws: Workspace<'a>, dry_run:bool, token: Option<String>, skip: Vec<Regex>, ignore_version_pre: Vec<Identifier>)
-    -> Result<(), Box<dyn Error>>
-{
-
-    let packages = to_release(&ws, skip, ignore_version_pre)?;
-
-    ws.config().shell().status("Releasing", &packages
-        .iter()
-        .map(|p| format!("{} ({})", p.name(), p.version()))
-        .collect::<Vec<String>>()
-        .join(", ")
-    )?;
-    commands::release(packages, ws, dry_run, token)
-}
-
-fn _run(args: Opt, root_manifest: PathBuf) -> Result<(), Box<dyn Error>> {
-    let c = CargoConfig::default().expect("Couldn't create cargo config");
-    c.shell().set_verbosity(if args.verbose { Verbosity::Verbose }  else { Verbosity::Normal });
-    match args.cmd {
-        Command::DeDevDeps => {
-            c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
-            run_recursive(root_manifest, commands::deactivate_dev_dependencies)
-        }
-        Command::ToRelease { skip, ignore_version_pre } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let packages = to_release(&ws, skip,  ignore_version_pre)?;
-            println!("{:}", packages
-                .iter()
-                    .map(|p| format!("{} ({})", p.name(), p.version()))
-                .collect::<Vec<String>>()
-                .join(", ")
-            );
-            Ok(())
-        }
-        Command::Em { dry_run, skip, token, ignore_version_pre } => {
-            c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
-            // we first disable dev-dependencies
-            run_recursive(root_manifest.clone(), commands::deactivate_dev_dependencies)?;
-
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            release(ws, dry_run, token, skip, ignore_version_pre)
-        }
-    }
-}
-
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     let _ = Logger::with_str(args.log.clone()).start();
-    trace!("Running with config {:?}", args);
-    let manifest_path = {
+    let c = CargoConfig::default().expect("Couldn't create cargo config");
+    c.shell().set_verbosity(
+        if args.verbose {
+            Verbosity::Verbose
+        }  else {
+            Verbosity::Normal
+        }
+    );
+
+    let root_manifest = {
         let mut path = args.manifest_path.clone();
         if path.is_dir() {
             path = path.join("Cargo.toml")
         }
         fs::canonicalize(path)?
     };
+    
+    let maybe_patch = |should_patch: bool| {
+        if !should_patch { return Ok(()); }
+    
+        c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
+        commands::deactivate_dev_dependencies(root_manifest.clone())
+    };
 
-    trace!("Using manifest {:?}", &manifest_path);
-    _run(args, manifest_path)
+    match args.cmd {
+        Command::DeDevDeps => {
+            maybe_patch(true)
+        }
+        Command::ToRelease { skip, ignore_version_pre, include_dev } => {
+            maybe_patch(include_dev)?;
+
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            let packages = commands::packages_to_release(&ws, skip,  ignore_version_pre)?;
+
+            println!("{:}", packages
+                .iter()
+                    .map(|p| format!("{} ({})", p.name(), p.version()))
+                .collect::<Vec<String>>()
+                .join(", ")
+            );
+
+            Ok(())
+        }
+        Command::Check { skip, ignore_version_pre, include_dev } => {
+            maybe_patch(include_dev)?;
+            
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            let packages = commands::packages_to_release(&ws, skip,  ignore_version_pre)?;
+
+            commands::check(&packages, &ws)
+        }
+        Command::Em { dry_run, skip, token, ignore_version_pre, include_dev } => {
+            maybe_patch(include_dev)?;
+
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+            let packages = commands::packages_to_release(&ws, skip, ignore_version_pre)?;
+
+            commands::check(&packages, &ws)?;
+
+            ws.config().shell().status("Releasing", &packages
+                .iter()
+                .map(|p| format!("{} ({})", p.name(), p.version()))
+                .collect::<Vec<String>>()
+                .join(", ")
+            )?;
+
+            commands::release(packages, ws, dry_run, token)
+        }
+    }
 }
