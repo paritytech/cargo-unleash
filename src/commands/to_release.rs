@@ -64,6 +64,7 @@ pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, skip: F) -> Result<Vec<Pac
     let packages = indices
         .into_iter()
         .map(|i| graph.node_weight(i).unwrap().clone())
+        .rev()
         .collect();
 
     Ok(packages)
