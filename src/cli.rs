@@ -43,8 +43,8 @@ pub struct PackageSelectOptions {
     /// Ignore version pre-releases
     ///
     /// Skip if the SemVer pre-release field is any of the listed. Mutuable exclusive with `--package`
-    #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers))]
-    pub ignore_version_pre: Vec<Identifier>,
+    #[structopt(short = "i", long="ignore-pre-version", parse(from_str = parse_identifiers))]
+    pub ignore_pre_version: Vec<Identifier>,
     /// Ignore whether `publish` is set.
     ///
     /// If nothing else is specified `publish = true` is assumed for every package. If publish
@@ -146,10 +146,10 @@ pub struct Opt {
 }
 
 fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package) -> bool>, String> {
-    let PackageSelectOptions { packages, skip, ignore_version_pre, ignore_publish } = args;
+    let PackageSelectOptions { packages, skip, ignore_pre_version, ignore_publish } = args;
 
     if !packages.is_empty() {
-        if !skip.is_empty() || !ignore_version_pre.is_empty() {
+        if !skip.is_empty() || !ignore_pre_version.is_empty() {
             return Err("-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre".into())
         }
     }
@@ -161,7 +161,7 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
         return Ok(Box::new(move |p: &Package| publish(p) && packages.contains(&p.name())));
     }
 
-    if !skip.is_empty() || !ignore_version_pre.is_empty() {
+    if !skip.is_empty() || !ignore_pre_version.is_empty() {
         return Ok(Box::new(move |p: &Package| {
             if !publish(p) { return false }
             let name = p.name();
@@ -170,7 +170,7 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
             }
             if p.version().is_prerelease() {
                 for pre in &p.version().pre {
-                    if ignore_version_pre.contains(&pre) {
+                    if ignore_pre_version.contains(&pre) {
                         return false
                     }
                 }
