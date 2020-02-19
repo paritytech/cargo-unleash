@@ -8,10 +8,13 @@ use semver::Identifier;
 use cargo::{
     util::config::Config as CargoConfig,
     core::{
+        package::Package,
+        InternedString,
         Verbosity, Workspace
     },
 };
 use flexi_logger::Logger;
+use log::trace;
 use regex::Regex;
 
 fn parse_identifiers(src: &str) -> Identifier {
@@ -30,39 +33,21 @@ pub enum Command {
     DeDevDeps,
     /// calculate the packages that should be released, in the order they should be released
     ToRelease {
-        /// skip the package names matching ...
-        #[structopt(long, parse(try_from_str = parse_regex))]
-        skip: Vec<Regex>,
-        /// ignore version pre-releases, comma separated
-        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
-        ignore_version_pre: Vec<Identifier>,
         /// Do not disable dev-dependencies
         #[structopt(long="include-dev-deps")]
         include_dev: bool,
     },
     /// Check packages
     Check {
-        /// skip the package names matching ...
-        #[structopt(long, parse(try_from_str = parse_regex))]
-        skip: Vec<Regex>,
-        /// ignore version pre-releases, comma separated
-        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers))]
-        ignore_version_pre: Vec<Identifier>,
         /// Do not disable dev-dependencies
         #[structopt(long="include-dev-deps")]
         include_dev: bool,
     },
     /// Unleash 'em dragons 
-    Em {
+    EmDragons {
         /// Do not disable dev-dependencies
         #[structopt(long="include-dev-deps")]
         include_dev: bool,
-        /// skip the package names matching ...
-        #[structopt(long, parse(try_from_str = parse_regex))]
-        skip: Vec<Regex>,
-        /// ignore version pre-releases, comma separated
-        #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
-        ignore_version_pre: Vec<Identifier>,
         /// dry run
         #[structopt(long="dry-run")]
         dry_run: bool,
@@ -87,6 +72,15 @@ pub struct Opt {
     /// Show verbose cargo output
     #[structopt(long = "verbose", short = "v")]
     pub verbose: bool,
+    /// Only use the specfic set of packages
+    #[structopt(short, long, parse(from_str))]
+    pub packages: Vec<InternedString>,
+    /// skip the package names matching ...
+    #[structopt(short, long, parse(try_from_str = parse_regex))]
+    pub skip: Vec<Regex>,
+    /// ignore version pre-releases, comma separated
+    #[structopt(short = "i", long="ignore-version-pre", parse(from_str = parse_identifiers), default_value = "dev")]
+    pub ignore_version_pre: Vec<Identifier>,
 
     #[structopt(subcommand)]
     pub cmd: Command,
@@ -110,24 +104,58 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         }
         fs::canonicalize(path)?
     };
+
+    let (packages, skip, ignore_version_pre) = {
+        if !args.packages.is_empty() {
+            if !args.skip.is_empty() || !args.ignore_version_pre.is_empty() {
+                return Err("-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre".into())
+            }
+        }
+        (&args.packages, &args.skip, &args.ignore_version_pre)
+    };
+
+    let predicate = |p: &Package| {
+        if let Some(false) = p.publish().as_ref().map(|v| v.is_empty()) {
+            trace!("Skipping {} because it shouldn't be published", p.name());
+            return false
+        }
+        let name = &p.name();
+        if !packages.is_empty() {
+            return packages.contains(name)
+        }
+        if skip.iter().find(|r| r.is_match(name)).is_some() {
+            return false
+        }
+        if p.version().is_prerelease() {
+            for pre in &p.version().pre {
+                if ignore_version_pre.contains(&pre) {
+                    return false
+                }
+            }
+        }
+        true
+    };
     
-    let maybe_patch = |shouldnt_patch: bool| {
+    let maybe_patch = |shouldnt_patch| {
         if shouldnt_patch { return Ok(()); }
     
         c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
-        commands::deactivate_dev_dependencies(root_manifest.clone())
+            
+        let ws = Workspace::new(&root_manifest, &c)
+            .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+        commands::deactivate_dev_dependencies(ws, predicate)
     };
 
     match args.cmd {
         Command::DeDevDeps => {
             maybe_patch(false)
         }
-        Command::ToRelease { skip, ignore_version_pre, include_dev } => {
+        Command::ToRelease { include_dev } => {
             maybe_patch(include_dev)?;
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let packages = commands::packages_to_release(&ws, skip,  ignore_version_pre)?;
+            let packages = commands::packages_to_release(&ws, predicate)?;
 
             println!("{:}", packages
                 .iter()
@@ -138,22 +166,22 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             Ok(())
         }
-        Command::Check { skip, ignore_version_pre, include_dev } => {
+        Command::Check { include_dev } => {
             maybe_patch(include_dev)?;
             
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let packages = commands::packages_to_release(&ws, skip,  ignore_version_pre)?;
+            let packages = commands::packages_to_release(&ws, predicate)?;
 
             commands::check(&packages, &ws)
         }
-        Command::Em { dry_run, skip, token, ignore_version_pre, include_dev } => {
+        Command::EmDragons { dry_run, token, include_dev } => {
             maybe_patch(include_dev)?;
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
 
-            let packages = commands::packages_to_release(&ws, skip, ignore_version_pre)?;
+            let packages = commands::packages_to_release(&ws, predicate)?;
 
             commands::check(&packages, &ws)?;
 

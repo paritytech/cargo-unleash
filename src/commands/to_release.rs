@@ -7,37 +7,9 @@ use cargo::{
 use std::collections::HashMap;
 use petgraph::Graph;
 use log::{trace, warn};
-use semver::Identifier;
-use regex::Regex;
-
-
 
 /// Generate the packages we should be releasing
-pub fn packages_to_release<'a>(ws: &Workspace<'a>, skip: Vec<Regex>, ignore_version_pre: Vec<Identifier>)
-    -> Result<Vec<Package>, String>
-{
-    let skipper = |p: &Package| {
-        if let Some(false) = p.publish().as_ref().map(|v| v.is_empty()) {
-            trace!("Skipping {} because it shouldn't be published", p.name());
-            return true
-        }
-        let name = p.name();
-        if skip.iter().find(|r| r.is_match(&name)).is_some() {
-            return true
-        }
-        if p.version().is_prerelease() {
-            for pre in &p.version().pre {
-                if ignore_version_pre.contains(&pre) {
-                    return true
-                }
-            }
-        }
-        false
-    };
-    to_release(ws, skipper)
-}
-
-fn to_release<'a, F>(ws: &Workspace<'a>, skip: F) -> Result<Vec<Package>, String>
+pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: F) -> Result<Vec<Package>, String>
     where F: Fn(&Package) -> bool
 {
     // based on the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
@@ -48,7 +20,7 @@ fn to_release<'a, F>(ws: &Workspace<'a>, skip: F) -> Result<Vec<Package>, String
     let mut ignored = HashMap::new();
 
     for member in ws.members() {
-        if skip(&member) {
+        if !predicate(&member) {
             let _ = ignored.insert(member.name(), member.clone());
         } else {
             let index = graph.add_node(member.clone());
