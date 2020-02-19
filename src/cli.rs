@@ -58,35 +58,61 @@ pub struct PackageSelectOptions {
 pub enum Command {
     /// Deactivate the `[dev-dependencies]`
     ///
-    /// Goes through the workspace and removes the `[dev-dependencies]`-section from the package
+    /// Go through the workspace and remove the `[dev-dependencies]`-section from the package
     /// manifest for all packages matching.
     DeDevDeps {
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
     },
-    /// calculate the packages that should be released, in the order they should be released
+    /// Calculate the packages and the order in which to release
+    ///
+    /// Go through the members of the workspace and calculate the dependency tree. Halt early
+    /// if any circles are found
     ToRelease {
         /// Do not disable dev-dependencies
+        ///
+        /// By default we disable dev-dependencies before the run.
         #[structopt(long="include-dev-deps")]
         include_dev: bool,
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
     },
     /// Check whether crates can be packaged
+    ///
+    /// Package the selected packages, then check the packages can be build with
+    /// the packages as dependencies as to be released.
     Check {
         /// Do not disable dev-dependencies
+        ///
+        /// By default we disable dev-dependencies before the run.
         #[structopt(long="include-dev-deps")]
         include_dev: bool,
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
+        /// Actually build the package
+        ///
+        /// By default, this only runs `cargo check` against the package
+        /// build. Set this flag to have it run an actual `build` instead.
+        #[structopt(long="build")]
+        build: bool,
     },
-    /// Unleash 'em dragons 
+    /// Unleash 'em dragons
+    ///
+    /// Package all selected crates, check them and attempt to publish them.
     EmDragons {
         /// Do not disable dev-dependencies
+        ///
+        /// By default we disable dev-dependencies before the run.
         #[structopt(long="include-dev-deps")]
         include_dev: bool,
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
+        /// Actually build the package in check
+        ///
+        /// By default, this only runs `cargo check` against the package
+        /// build. Set this flag to have it run an actual `build` instead.
+        #[structopt(long="build")]
+        build: bool,
         /// dry run
         #[structopt(long="dry-run")]
         dry_run: bool,
@@ -102,10 +128,13 @@ pub enum Command {
     about = "Release the crates of this massiv monorepo"
 )]
 pub struct Opt {
-    /// Output file, stdout if not present
-    #[structopt(short="m", long, parse(from_os_str), default_value = "Cargo.toml")]
+    /// The path to workspace manifest
+    ///
+    /// Can either be the folder if the file is named `Cargo.toml` or the path
+    /// to the specific `.toml`-manifest to load as the cargo workspace.
+    #[structopt(short="m", long, parse(from_os_str), default_value = "./")]
     pub manifest_path: PathBuf,
-    /// Specify the log levels
+    /// Specify the log levels.
     #[structopt(long = "log", short = "l", default_value = "warn")]
     pub log: String,
     /// Show verbose cargo output
@@ -175,7 +204,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     let maybe_patch = |shouldnt_patch, predicate| {
         if shouldnt_patch { return Ok(()); }
     
-        c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
+        c.shell().status("Preparing", "Disabling Dev Dependencies")?;
             
         let ws = Workspace::new(&root_manifest, &c)
             .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
@@ -202,7 +231,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             Ok(())
         }
-        Command::Check { include_dev, pkg_opts } => {
+        Command::Check { include_dev, build, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
             
@@ -210,9 +239,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws)
+            commands::check(&packages, &ws, build)
         }
-        Command::EmDragons { dry_run, token, include_dev, pkg_opts } => {
+        Command::EmDragons { dry_run, token, include_dev, build, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev,  &predicate)?;
 
@@ -221,7 +250,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws)?;
+            commands::check(&packages, &ws, build)?;
 
             ws.config().shell().status("Releasing", &packages
                 .iter()
