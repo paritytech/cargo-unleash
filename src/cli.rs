@@ -111,8 +111,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         fs::canonicalize(path)?
     };
     
-    let maybe_patch = |should_patch: bool| {
-        if !should_patch { return Ok(()); }
+    let maybe_patch = |shouldnt_patch: bool| {
+        if shouldnt_patch { return Ok(()); }
     
         c.shell().status("Preparing", "Disabling Dev Dependencies for all crates")?;
         commands::deactivate_dev_dependencies(root_manifest.clone())
@@ -120,7 +120,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
     match args.cmd {
         Command::DeDevDeps => {
-            maybe_patch(true)
+            maybe_patch(false)
         }
         Command::ToRelease { skip, ignore_version_pre, include_dev } => {
             maybe_patch(include_dev)?;
