@@ -4,6 +4,7 @@ version = "0.1.0-git"
 authors = ["Benjamin Kampmann <ben@gnunicorn.org>"]
 edition = "2018"
 license = "GPL-3.0"
+repository ="https://github.com/gnunicorn/cargo-unleash"
 
 [dependencies]
 structopt = "0.3.9"

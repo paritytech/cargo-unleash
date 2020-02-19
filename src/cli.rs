@@ -56,6 +56,21 @@ pub struct PackageSelectOptions {
 
 #[derive(StructOpt, Debug)]
 pub enum Command {
+    /// Set a field in all manifests
+    ///
+    /// Go through all matching crates and set the field name to value.
+    /// Add the field if it doesn't exists yet.
+    Set {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+        /// The root key table to look the key up in
+        #[structopt(short, long, default_value = "package")]
+        root_key: String,
+        /// Name of the field
+        name: String,
+        /// Value to set it, too
+        value: String,
+    },
     /// Deactivate the `[dev-dependencies]`
     ///
     /// Go through the workspace and remove the `[dev-dependencies]`-section from the package
@@ -201,17 +216,28 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         fs::canonicalize(path)?
     };
     
-    let maybe_patch = |shouldnt_patch, predicate| {
+    let maybe_patch = |shouldnt_patch, predicate: &Box<dyn Fn(&Package) -> bool> | {
         if shouldnt_patch { return Ok(()); }
     
         c.shell().status("Preparing", "Disabling Dev Dependencies")?;
             
         let ws = Workspace::new(&root_manifest, &c)
             .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-        commands::deactivate_dev_dependencies(ws, predicate)
+        commands::deactivate_dev_dependencies(ws.members().filter(|p| 
+            predicate(p) && c.shell().status("Patching", p.name()).is_ok()
+        ))
     };
 
     match args.cmd {
+        Command::Set { root_key, name, value, pkg_opts } => {
+            let predicate = make_pkg_predicate(pkg_opts)?;
+
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            commands::set_field(ws.members().filter(|p| 
+                    predicate(p) && c.shell().status("Setting on", p.name()).is_ok()
+                ), root_key, name, value)
+        }
         Command::DeDevDeps { pkg_opts } => {
             maybe_patch(false,  &make_pkg_predicate(pkg_opts)?)
         }
