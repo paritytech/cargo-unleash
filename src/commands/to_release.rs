@@ -65,7 +65,11 @@ pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: F) -> Result<Ve
         .into_iter()
         .map(|i| graph.node_weight(i).unwrap().clone())
         .rev()
-        .collect();
+        .collect::<Vec<_>>();
+
+    if packages.len() == 0 {
+        return Err("No Packages matching criteria. Exiting".into());
+    }
 
     Ok(packages)
 }
