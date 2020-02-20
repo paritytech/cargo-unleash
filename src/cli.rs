@@ -290,11 +290,11 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             match cmd {
                 VersionCommand::Set { version } => commands::set_version(&ws,
-                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| predicate(p),
                     |_| Some(version.clone())
                 ),
                 VersionCommand::BumpPatch => commands::set_version(&ws,
-                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| predicate(p),
                     |p| {
                         let mut v = p.version().clone();
                         v.pre = Vec::new();
@@ -303,7 +303,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     }
                 ),
                 VersionCommand::BumpMinor => commands::set_version(&ws,
-                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| predicate(p),
                     |p| {
                         let mut v = p.version().clone();
                         v.pre = Vec::new();
@@ -312,11 +312,36 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     }
                 ),
                 VersionCommand::BumpMajor => commands::set_version(&ws,
-                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| predicate(p),
                     |p| {
                         let mut v = p.version().clone();
                         v.pre = Vec::new();
                         v.increment_major();
+                        Some(v)
+                    }
+                ),
+                VersionCommand::SetPre { pre } => commands::set_version(&ws,
+                    |p| predicate(p),
+                    |p| {
+                        let mut v = p.version().clone();
+                        v.pre = vec![pre.clone()];
+                        Some(v)
+                    }
+                ),
+                VersionCommand::SetBuild { meta } => commands::set_version(&ws,
+                    |p| predicate(p),
+                    |p| {
+                        let mut v = p.version().clone();
+                        v.build = vec![meta.clone()];
+                        Some(v)
+                    }
+                ),
+                VersionCommand::Release => commands::set_version(&ws,
+                    |p| predicate(p),
+                    |p| {
+                        let mut v = p.version().clone();
+                        v.pre = vec![];
+                        v.build = vec![];
                         Some(v)
                     }
                 ),
