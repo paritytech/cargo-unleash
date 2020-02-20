@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 use structopt::StructOpt;
-use semver::Identifier;
+use semver::{Identifier, Version};
 use cargo::{
     util::config::Config as CargoConfig,
     core::{
@@ -54,6 +54,39 @@ pub struct PackageSelectOptions {
     ignore_publish: bool,
 }
 
+
+#[derive(StructOpt, Debug)]
+pub enum VersionCommand {
+    /// Pick pre-releases and put them to release mode.
+    Release,
+    /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
+    BumpPre,
+    /// Increase the patch version, unset prerelease
+    BumpPatch,
+    /// Increase the minor version, unset prerelease and patch
+    BumpMinor,
+    /// Increase the major version, unset prerelease, minor and patch
+    BumpMajor,
+    /// Hard set version to given string
+    Set { 
+        /// Set to a specific Version
+        version: Version,
+    },
+    /// Set the pre-release to string
+    SetPre { 
+        /// The string to set the pre-release to
+        #[structopt(parse(from_str = parse_identifiers))]
+        pre: Identifier,
+    },
+    /// Set the metadata to string
+    SetBuild { 
+        /// The specific metadata to set to
+        #[structopt(parse(from_str = parse_identifiers))]
+        meta: Identifier,
+    }
+}
+
+
 #[derive(StructOpt, Debug)]
 pub enum Command {
     /// Set a field in all manifests
@@ -70,6 +103,17 @@ pub enum Command {
         name: String,
         /// Value to set it, too
         value: String,
+    },
+    /// Messing with versioning
+    ///
+    /// Change versions as requested, then update all package's dependencies
+    /// to ensure they are still matching
+    Version {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+
+        #[structopt(subcommand)]
+        cmd: VersionCommand,
     },
     /// Deactivate the `[dev-dependencies]`
     ///
@@ -237,6 +281,22 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             commands::set_field(ws.members().filter(|p| 
                     predicate(p) && c.shell().status("Setting on", p.name()).is_ok()
                 ), root_key, name, value)
+        }
+
+        Command::Version { pkg_opts, cmd } => {
+            let predicate = make_pkg_predicate(pkg_opts)?;
+
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            match cmd {
+                VersionCommand::Set { version } => commands::set_version(&ws,
+                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |_| Some(version.clone())
+                ),
+                _ => {
+                    Err("Not Yet Supported".into())
+                }
+            }
         }
         Command::DeDevDeps { pkg_opts } => {
             maybe_patch(false,  &make_pkg_predicate(pkg_opts)?)

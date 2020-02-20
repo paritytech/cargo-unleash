@@ -7,7 +7,7 @@ use crate::util::edit_each;
 pub fn set_field<'a, I>(iter: I, root_key: String, key: String, value: String) -> Result<(), Box<dyn Error>>
 where I: Iterator<Item=&'a Package>
 {
-    edit_each(iter, |p, doc| {
+    let _ = edit_each(iter, |p, doc| {
         let table = {
             let t = doc.as_table_mut().entry(&root_key);
             if t.is_none() {
@@ -22,5 +22,6 @@ where I: Iterator<Item=&'a Package>
         let entry = table.entry(&key);
         *entry = Item::Value(value.clone().into());
         Ok(())
-    })
+    });
+    Ok(())
 }

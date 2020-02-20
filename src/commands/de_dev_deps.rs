@@ -6,10 +6,6 @@ use crate::util::edit_each;
 pub fn deactivate_dev_dependencies<'a, I>(iter: I) -> Result<(), Box<dyn Error>>
 where I: Iterator<Item=&'a Package>
 {
-    edit_each(iter,
-        |_, doc| {
-            let _ = doc.as_table_mut().remove("dev-dependencies");
-            Ok(())
-        }
-    )
+    edit_each(iter,|_, doc| Ok(doc.as_table_mut().remove("dev-dependencies")))?;
+    Ok(())
 }
