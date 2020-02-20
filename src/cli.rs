@@ -293,6 +293,33 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
                     |_| Some(version.clone())
                 ),
+                VersionCommand::BumpPatch => commands::set_version(&ws,
+                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| {
+                        let mut v = p.version().clone();
+                        v.pre = Vec::new();
+                        v.increment_patch();
+                        Some(v)
+                    }
+                ),
+                VersionCommand::BumpMinor => commands::set_version(&ws,
+                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| {
+                        let mut v = p.version().clone();
+                        v.pre = Vec::new();
+                        v.increment_minor();
+                        Some(v)
+                    }
+                ),
+                VersionCommand::BumpMajor => commands::set_version(&ws,
+                    |p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok(),
+                    |p| {
+                        let mut v = p.version().clone();
+                        v.pre = Vec::new();
+                        v.increment_major();
+                        Some(v)
+                    }
+                ),
                 _ => {
                     Err("Not Yet Supported".into())
                 }

@@ -88,31 +88,29 @@ where
     };
 
     c.shell().status("Updating", "Dependency tree")?;
-    edit_each(ws.members(),
-        |_, doc| {
+    edit_each(ws.members(), |_, doc| {
+        let root = doc.as_table_mut();
 
-            let root = doc.as_table_mut();
-
-            updated_deps(root, &updates);
+        updated_deps(root, &updates);
+        
+        if let Item::Table(t) = root.entry("target") {
+            let keys = t.iter().filter_map(|(k, v)| {
+                if v.is_table() {
+                    Some(k.to_owned())
+                } else {
+                    None
+                }
+            }).collect::<Vec<_>>();
             
-            if let Item::Table(t) = root.entry("target") {
-                let keys = t.iter().filter_map(|(k, v)| {
-                    if v.is_table() {
-                        Some(k.to_owned())
-                    } else {
-                        None
-                    }
-                }).collect::<Vec<_>>();
-                
-                for k in keys {
-                    if let Item::Table(root) = t.entry(&k) {
-                        updated_deps(root, &updates);
-                    }
-                };
-            }
-
-            Ok(())
+            for k in keys {
+                if let Item::Table(root) = t.entry(&k) {
+                    updated_deps(root, &updates);
+                }
+            };
         }
-    )?;
+
+        Ok(())
+    })?;
+
     Ok(())
 }
