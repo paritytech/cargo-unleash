@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-unleash"
-version = "0.9.1-2019-02-12+2019-02-12"
+version = "1.0.0-dev"
 dependencies = [
  "cargo",
  "failure",

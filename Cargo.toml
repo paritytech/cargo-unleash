@@ -1,6 +1,6 @@
 [package]
 name = "cargo-unleash"
-version ="0.9.1"
+version ="1.0.0-dev"
 authors = ["Benjamin Kampmann <ben@gnunicorn.org>"]
 edition = "2018"
 license = "GPL-3.0"

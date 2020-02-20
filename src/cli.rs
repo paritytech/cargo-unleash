@@ -293,6 +293,25 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     |p| predicate(p),
                     |_| Some(version.clone())
                 ),
+                VersionCommand::BumpPre => commands::set_version(&ws,
+                    |p| predicate(p),
+                    |p| {
+                        let mut v = p.version().clone();
+                        if v.pre.is_empty() {
+                            v.pre = vec![Identifier::Numeric(1)]
+                        } else {
+                            match v.pre.pop() {
+                                Some(Identifier::Numeric(num)) => v.pre.push(Identifier::Numeric(num + 1)),
+                                Some(Identifier::AlphaNumeric(pre)) => {
+                                    v.pre.push(Identifier::AlphaNumeric(pre));
+                                    v.pre.push(Identifier::Numeric(1));
+                                },
+                                _ => unreachable!("There is a last item")
+                            }
+                        }
+                        Some(v)
+                    }
+                ),
                 VersionCommand::BumpPatch => commands::set_version(&ws,
                     |p| predicate(p),
                     |p| {
@@ -345,9 +364,6 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         Some(v)
                     }
                 ),
-                _ => {
-                    Err("Not Yet Supported".into())
-                }
             }
         }
         Command::DeDevDeps { pkg_opts } => {
