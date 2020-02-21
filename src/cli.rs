@@ -233,7 +233,17 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
         }
     }
 
-    let publish = move |p: &Package| ignore_publish || p.publish().as_ref().map(|v| v.is_empty()).unwrap_or(true);
+    let publish = move |p: &Package| {
+        let publ = if ignore_publish {
+            true
+        } else if let Some(v) = p.publish() {
+            !v.is_empty()
+        } else {
+            true
+        };
+        trace!("{:}.publish={}", p.name(),publ);
+        publ
+    };
 
     if !packages.is_empty() {
         trace!("going for matching against {:?}", packages);
