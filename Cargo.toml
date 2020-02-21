@@ -1,10 +1,11 @@
 [package]
 name = "cargo-unleash"
-version ="1.0.0-dev"
+version = "1.0.0-alpha.1"
 authors = ["Benjamin Kampmann <ben@gnunicorn.org>"]
 edition = "2018"
 license = "GPL-3.0"
 repository ="https://github.com/gnunicorn/cargo-unleash"
+description = "Tooling to manage releasing of crates in massiv workspaces/monorepos"
 
 [dependencies]
 structopt = "0.3.9"
