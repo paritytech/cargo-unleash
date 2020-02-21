@@ -58,28 +58,49 @@ pub struct PackageSelectOptions {
 #[derive(StructOpt, Debug)]
 pub enum VersionCommand {
     /// Pick pre-releases and put them to release mode.
-    Release,
+    Release {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+    },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
-    BumpPre,
+    BumpPre {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+    },
     /// Increase the patch version, unset prerelease
-    BumpPatch,
+    BumpPatch {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+    },
     /// Increase the minor version, unset prerelease and patch
-    BumpMinor,
+    BumpMinor {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+    },
     /// Increase the major version, unset prerelease, minor and patch
-    BumpMajor,
+    BumpMajor {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+    },
     /// Hard set version to given string
-    Set { 
+    Set {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
         /// Set to a specific Version
         version: Version,
     },
     /// Set the pre-release to string
-    SetPre { 
+    SetPre {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
         /// The string to set the pre-release to
         #[structopt(parse(from_str = parse_identifiers))]
         pre: Identifier,
     },
     /// Set the metadata to string
-    SetBuild { 
+    SetBuild {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
         /// The specific metadata to set to
         #[structopt(parse(from_str = parse_identifiers))]
         meta: Identifier,
@@ -109,9 +130,6 @@ pub enum Command {
     /// Change versions as requested, then update all package's dependencies
     /// to ensure they are still matching
     Version {
-        #[structopt(flatten)]
-        pkg_opts: PackageSelectOptions,
-
         #[structopt(subcommand)]
         cmd: VersionCommand,
     },
@@ -283,87 +301,108 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 ), root_key, name, value)
         }
 
-        Command::Version { pkg_opts, cmd } => {
-            let predicate = make_pkg_predicate(pkg_opts)?;
+        Command::Version { cmd } => {
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             match cmd {
-                VersionCommand::Set { version } => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |_| Some(version.clone())
-                ),
-                VersionCommand::BumpPre => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        if v.pre.is_empty() {
-                            v.pre = vec![Identifier::Numeric(1)]
-                        } else {
-                            match v.pre.pop() {
-                                Some(Identifier::Numeric(num)) => v.pre.push(Identifier::Numeric(num + 1)),
-                                Some(Identifier::AlphaNumeric(pre)) => {
-                                    v.pre.push(Identifier::AlphaNumeric(pre));
-                                    v.pre.push(Identifier::Numeric(1));
-                                },
-                                _ => unreachable!("There is a last item")
+                VersionCommand::Set { pkg_opts, version } => {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |_| Some(version.clone()))
+                }
+                VersionCommand::BumpPre { pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            if v.pre.is_empty() {
+                                v.pre = vec![Identifier::Numeric(1)]
+                            } else {
+                                match v.pre.pop() {
+                                    Some(Identifier::Numeric(num)) => v.pre.push(Identifier::Numeric(num + 1)),
+                                    Some(Identifier::AlphaNumeric(pre)) => {
+                                        v.pre.push(Identifier::AlphaNumeric(pre));
+                                        v.pre.push(Identifier::Numeric(1));
+                                    },
+                                    _ => unreachable!("There is a last item")
+                                }
                             }
+                            Some(v)
+                    })
+                }
+                VersionCommand::BumpPatch { pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.pre = Vec::new();
+                            v.increment_patch();
+                            Some(v)
                         }
-                        Some(v)
-                    }
-                ),
-                VersionCommand::BumpPatch => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        v.pre = Vec::new();
-                        v.increment_patch();
-                        Some(v)
-                    }
-                ),
-                VersionCommand::BumpMinor => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        v.pre = Vec::new();
-                        v.increment_minor();
-                        Some(v)
-                    }
-                ),
-                VersionCommand::BumpMajor => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        v.pre = Vec::new();
-                        v.increment_major();
-                        Some(v)
-                    }
-                ),
-                VersionCommand::SetPre { pre } => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        v.pre = vec![pre.clone()];
-                        Some(v)
-                    }
-                ),
-                VersionCommand::SetBuild { meta } => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        v.build = vec![meta.clone()];
-                        Some(v)
-                    }
-                ),
-                VersionCommand::Release => commands::set_version(&ws,
-                    |p| predicate(p),
-                    |p| {
-                        let mut v = p.version().clone();
-                        v.pre = vec![];
-                        v.build = vec![];
-                        Some(v)
-                    }
-                ),
+                    )
+                }
+                VersionCommand::BumpMinor  { pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.pre = Vec::new();
+                            v.increment_minor();
+                            Some(v)
+                        }
+                    )
+                }
+                VersionCommand::BumpMajor { pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.pre = Vec::new();
+                            v.increment_major();
+                            Some(v)
+                        }
+                    )
+                }
+                VersionCommand::SetPre { pre , pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.pre = vec![pre.clone()];
+                            Some(v)
+                        }
+                    )
+                }
+                VersionCommand::SetBuild { meta , pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.build = vec![meta.clone()];
+                            Some(v)
+                        }
+                    )
+                }
+                VersionCommand::Release { pkg_opts } =>  {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(&ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.pre = vec![];
+                            v.build = vec![];
+                            Some(v)
+                        }
+                    )
+                }
             }
         }
         Command::DeDevDeps { pkg_opts } => {
