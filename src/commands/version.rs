@@ -90,10 +90,8 @@ where
 {
     let c = ws.config();
 
-    let mut updates = HashMap::new();
-
-    
-    for s in edit_each(ws.members().filter(|p| predicate(p)),
+    let updates = edit_each(
+        ws.members().filter(|p| predicate(p)),
         |p, doc| Ok(mapper(p).map(|nv_version| {
             c.shell()
                 .status("Bumping", format!("{:}: {:} -> {:}", p.name(), p.version(), nv_version))
@@ -102,11 +100,10 @@ where
                     Value::from(nv_version.to_string()), " ", ""));
             (p.name().as_str().to_owned(), nv_version.clone())
         }))
-    )? {
-        if let Some((name, version)) = s {
-            updates.insert(name, version);
-        }
-    };
+    )?
+        .into_iter()
+        .filter_map(|s| s)
+        .collect::<HashMap<_,_>>();
 
     c.shell().status("Updating", "Dependency tree")?;
     edit_each(ws.members(), |p, doc| {

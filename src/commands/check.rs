@@ -23,8 +23,9 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 use crate::util::{edit_each_dep, DependencyEntry};
 
-
-fn inject_replacement(pkg: &Package, replace: &HashMap<String, String>) -> Result<(), Box<dyn Error>> {
+fn inject_replacement(pkg: &Package, replace: &HashMap<String, String>)
+    -> Result<(), Box<dyn Error>>
+{
 
     let manifest = pkg.manifest_path();
 
@@ -165,7 +166,8 @@ pub fn check<'a, 'r>(
 
     c.shell().status("Preparing", "Packages")?;
     let builds = packages.iter().map(|pkg| {
-        let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true).map_err(|e| format!("{:}", e))?;
+        let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)
+            .map_err(|e| format!("{:}", e))?;
         c.shell().status("Packing", &pkg).map_err(|e| format!("{:}", e))?;
         match package(&pkg_ws, &opts) {
             Ok(Some(rw_lock)) => Ok((pkg_ws, rw_lock)),
@@ -174,10 +176,9 @@ pub fn check<'a, 'r>(
         }
     });
 
-    let (errors, successes) : (Vec<_>, Vec<_>) = builds.partition(|r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
+    let (errors, successes) : (Vec<_>, Vec<_>) = builds.partition(
+            |r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
 
-        // .filter(|r: &Result<(Workspace<'_>, FileLock), String>| r.is_err())
-        // .collect::<Vec<String>>();
     let err_count = errors.iter().map(|r| r.as_ref().map_err(|e| error!("{:#?}", e))).count();
     if err_count > 0 {
         return Err(format!("Packing failed: {} Errors found", err_count).into())
@@ -187,7 +188,8 @@ pub fn check<'a, 'r>(
 
     c.shell().status("Checking", "Packages")?;
     for (pkg_ws, rw_lock) in successes.iter().filter_map(|e| e.as_ref().ok()) {
-        c.shell().status("Verfying", pkg_ws.current().expect("We've build localised workspaces. qed"))?;
+        c.shell().status("Verfying", pkg_ws.current()
+            .expect("We've build localised workspaces. qed"))?;
         run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
     }
     Ok(())
