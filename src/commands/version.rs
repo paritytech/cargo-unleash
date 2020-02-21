@@ -5,7 +5,7 @@ use std::{
 use cargo::core::{
     package::Package, Workspace
 };
-use toml_edit::{Item, Value, Table};
+use toml_edit::{Item, Value, Table, decorated};
 use semver::{Version, VersionReq};
 use crate::util::edit_each;
 use log::trace;
@@ -19,7 +19,7 @@ fn updated_deps<'a>(
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
                 t.iter().filter_map(|(key, v)| {
-                    if v.is_inline_table() { Some(key.to_owned()) } else { None }
+                    if v.is_table() || v.is_inline_table() { Some(key.to_owned()) } else { None }
                 }).collect::<Vec<_>>()
             } else {
                 continue
@@ -28,44 +28,87 @@ fn updated_deps<'a>(
         let t = root.entry(k).as_table_mut().expect("Just checked. qed");
 
         for key in keys {
-            if let Some(info) = t.entry(&key).as_inline_table_mut() {
+            match t.entry(&key) {
+                Item::Value(Value::InlineTable(info)) => {
 
-                if !info.contains_key("path") {
-                    continue // entry isn't local
-                }
-
-                let name = {
-                    if let Some(name) = info.get("package").clone() { // is there a rename
-                        name
-                            .as_str()
-                            .expect("Package is always a string, or cargo would have failed before. qed")
-                            .to_owned()
-                    } else {
-                        key
+                    if !info.contains_key("path") {
+                        continue // entry isn't local
                     }
-                };
 
-                if let Some(new_version) = updates.get(&name) {
-                    trace!("We changed the version of {:} to {:}", name, new_version);
-                    // this has been changed.
-                    if let Some(v_req) = info.get_mut("version") {
-                        let r = v_req
-                            .as_str()
-                            .ok_or("Version must be string".to_owned())
-                            .and_then(|s| VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e)))
-                            .expect("Cargo enforces us using semver versions. qed");
-                        if !r.matches(new_version) {
-                            trace!("Versions don't match anymore, updating.");
-                            counter += 1;
-                            *v_req = Value::from(format!("{:}", new_version));
+                    let name = {
+                        if let Some(name) = info.get("package").clone() { // is there a rename
+                            name
+                                .as_str()
+                                .expect("Package is always a string, or cargo would have failed before. qed")
+                                .to_owned()
+                        } else {
+                            key
                         }
-                    } else {
-                        // not yet present, we force set.
-                        trace!("No version found, setting.");
+                    };
+
+                    if let Some(new_version) = updates.get(&name) {
+                        trace!("We changed the version of {:} to {:}", name, new_version);
+                        // this has been changed.
+                        if let Some(v_req) = info.get_mut("version") {
+                            let r = v_req
+                                .as_str()
+                                .ok_or("Version must be string".to_owned())
+                                .and_then(|s| VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e)))
+                                .expect("Cargo enforces us using semver versions. qed");
+                            if !r.matches(new_version) {
+                                trace!("Versions don't match anymore, updating.");
+                                counter += 1;
+                                *v_req = Value::from(format!("{:}", new_version));
+                            }
+                        } else {
+                            // not yet present, we force set.
+                            trace!("No version found, setting.");
+                            counter += 1;
+                            info.get_or_insert("version", Value::from(format!("{:}", new_version)));
+                        }
+                    }
+                }, 
+                Item::Table(info) => {
+                    if !info.contains_key("path") {
+                        continue // entry isn't local
+                    }
+
+                    let name = {
+                        if let Some(name) = info.get("package").clone() { // is there a rename
+                            name
+                                .as_str()
+                                .expect("Package is always a string, or cargo would have failed before. qed")
+                                .to_owned()
+                        } else {
+                            key
+                        }
+                    };
+
+                    if let Some(new_version) = updates.get(&name) {
+                        trace!("We changed the version of {:} to {:}", name, new_version);
+                        // this has been changed.
+                        if let Some(v_req) = info.get("version") {
+                            let r = v_req
+                                .as_str()
+                                .ok_or("Version must be string".to_owned())
+                                .and_then(|s| VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e)))
+                                .expect("Cargo enforces us using semver versions. qed");
+                            if r.matches(new_version) {
+                                continue
+                            }
+                            trace!("Versions don't match anymore, updating.");
+                        } else {
+                            trace!("No version found, setting.");
+                        }
+
                         counter += 1;
-                        info.get_or_insert("version", Value::from(format!("{:}", new_version)));
+                        info["version"] = Item::Value(Value::from(format!("{:}", new_version)));
                     }
                 }
+                _ => {
+                    trace!("Unsupported dependency format")
+                }
+
             }
         }
     };
