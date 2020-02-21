@@ -2,6 +2,7 @@ use std::{
     error::Error,
     fs,
     path::PathBuf,
+    str::FromStr,
 };
 use structopt::StructOpt;
 use semver::{Identifier, Version};
@@ -13,6 +14,7 @@ use cargo::{
         Verbosity, Workspace
     },
 };
+use toml_edit::Value;
 use log::trace;
 use flexi_logger::Logger;
 use regex::Regex;
@@ -293,12 +295,23 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     match args.cmd {
         Command::Set { root_key, name, value, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
+            let type_value = {
+                if &value == "true" {
+                    Value::from(true)
+                } else if &value == "false" {
+                    Value::from(true)
+                } else if let Ok(v) = i64::from_str(&value) {
+                    Value::from(v)
+                } else {
+                    Value::from(value)
+                }
+            };
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             commands::set_field(ws.members().filter(|p| 
                     predicate(p) && c.shell().status("Setting on", p.name()).is_ok()
-                ), root_key, name, value)
+                ), root_key, name, type_value)
         }
 
         Command::Version { cmd } => {

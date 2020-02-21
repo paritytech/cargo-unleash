@@ -1,10 +1,10 @@
 use std::{error::Error};
 use cargo::core::package::Package;
-use toml_edit::{ Item, Table };
+use toml_edit::{ Item, Table, Value, decorated};
 use crate::util::edit_each;
 
 /// Deactivate the Dev Dependencies Section of the given toml
-pub fn set_field<'a, I>(iter: I, root_key: String, key: String, value: String) -> Result<(), Box<dyn Error>>
+pub fn set_field<'a, I>(iter: I, root_key: String, key: String, value: Value) -> Result<(), Box<dyn Error>>
 where I: Iterator<Item=&'a Package>
 {
     let _ = edit_each(iter, |p, doc| {
@@ -20,7 +20,7 @@ where I: Iterator<Item=&'a Package>
             }
         };
         let entry = table.entry(&key);
-        *entry = Item::Value(value.clone().into());
+        *entry = Item::Value(decorated(value.clone(), " ", ""));
         Ok(())
     });
     Ok(())
