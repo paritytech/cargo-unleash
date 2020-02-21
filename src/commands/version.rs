@@ -58,13 +58,14 @@ fn updated_deps<'a>(
                             if !r.matches(new_version) {
                                 trace!("Versions don't match anymore, updating.");
                                 counter += 1;
-                                *v_req = Value::from(format!("{:}", new_version));
+                                *v_req = decorated(Value::from(format!("{:}", new_version)), " ", "");
                             }
                         } else {
                             // not yet present, we force set.
                             trace!("No version found, setting.");
                             counter += 1;
-                            info.get_or_insert("version", Value::from(format!("{:}", new_version)));
+                            // having a space here means we formatting it nicer inline
+                            info.get_or_insert(" version", decorated(Value::from(format!("{:}", new_version)), " ", " "));
                         }
                     }
                 }, 
@@ -102,7 +103,7 @@ fn updated_deps<'a>(
                         }
 
                         counter += 1;
-                        info["version"] = Item::Value(Value::from(format!("{:}", new_version)));
+                        info["version"] = Item::Value(decorated(Value::from(format!("{:}", new_version)), " ", ""));
                     }
                 }
                 _ => {
@@ -131,7 +132,7 @@ where
             c.shell()
                 .status("Bumping", format!("{:}: {:} -> {:}", p.name(), p.version(), nv_version))
                 .expect("Writing to the shell would have failed before. qed");
-            doc["package"]["version"] = Item::Value(Value::from(nv_version.to_string()));
+            doc["package"]["version"] = Item::Value(decorated(Value::from(nv_version.to_string()), " ", ""));
             (p.name().as_str().to_owned(), nv_version.clone())
         }))
     )? {
