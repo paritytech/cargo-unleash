@@ -8,22 +8,23 @@ use cargo::core::{
 use toml_edit::{Item, Value, Table};
 use semver::{Version, VersionReq};
 use crate::util::edit_each;
+use log::trace;
 
 fn updated_deps<'a>(
     root: &'a mut Table,
     updates: &'a HashMap<String, Version>
-) {
+) -> u32 {
+    let mut counter = 0;
     for k in vec!["dependencies", "dev-dependencies", "build-dependencies"] {
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
                 t.iter().filter_map(|(key, v)| {
-                    if v.is_table() { Some(key.to_owned()) } else { None }
+                    if v.is_inline_table() { Some(key.to_owned()) } else { None }
                 }).collect::<Vec<_>>()
             } else {
                 continue
             }
         };
-
         let t = root.entry(k).as_table_mut().expect("Just checked. qed");
 
         for key in keys {
@@ -45,6 +46,7 @@ fn updated_deps<'a>(
                 };
 
                 if let Some(new_version) = updates.get(&name) {
+                    trace!("We changed the version of {:} to {:}", name, new_version);
                     // this has been changed.
                     if let Some(v_req) = info.get_mut("version") {
                         let r = v_req
@@ -53,13 +55,21 @@ fn updated_deps<'a>(
                             .and_then(|s| VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e)))
                             .expect("Cargo enforces us using semver versions. qed");
                         if !r.matches(new_version) {
+                            trace!("Versions don't match anymore, updating.");
+                            counter += 1;
                             *v_req = Value::from(format!("{:}", new_version));
                         }
+                    } else {
+                        // not yet present, we force set.
+                        trace!("No version found, setting.");
+                        counter += 1;
+                        info.get_or_insert("version", Value::from(format!("{:}", new_version)));
                     }
                 }
             }
         }
     };
+    counter
 }
 
 /// For packages matching predicate set to mapper given version, if any. Update all members dependencies
@@ -88,10 +98,11 @@ where
     };
 
     c.shell().status("Updating", "Dependency tree")?;
-    edit_each(ws.members(), |_, doc| {
+    edit_each(ws.members(), |p, doc| {
+        c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
-
-        updated_deps(root, &updates);
+        let mut updates_count = 0;
+        updates_count += updated_deps(root, &updates);
         
         if let Item::Table(t) = root.entry("target") {
             let keys = t.iter().filter_map(|(k, v)| {
@@ -104,10 +115,20 @@ where
             
             for k in keys {
                 if let Item::Table(root) = t.entry(&k) {
-                    updated_deps(root, &updates);
+                    updates_count += updated_deps(root, &updates);
                 }
             };
         }
+        if updates_count == 0 {
+            c.shell().status("Done", "No dependency updates")?;
+            
+        } else if updates_count == 1 {
+            c.shell().status("Done", "One dependency updated")?;
+        } else {
+            c.shell().status("Done", format!("{} dependencies updated", updates_count))?;
+        }
+
+
 
         Ok(())
     })?;
