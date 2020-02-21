@@ -5,115 +5,80 @@ use std::{
 use cargo::core::{
     package::Package, Workspace
 };
-use toml_edit::{Item, Value, Table, decorated};
+use toml_edit::{Item, Value, decorated};
 use semver::{Version, VersionReq};
-use crate::util::edit_each;
+use crate::util::{edit_each, edit_each_dep, DependencyEntry};
 use log::trace;
 
-fn updated_deps<'a>(
-    root: &'a mut Table,
-    updates: &'a HashMap<String, Version>
-) -> u32 {
-    let mut counter = 0;
-    for k in vec!["dependencies", "dev-dependencies", "build-dependencies"] {
-        let keys = {
-            if let Some(Item::Table(t)) = &root.get(k) {
-                t.iter().filter_map(|(key, v)| {
-                    if v.is_table() || v.is_inline_table() { Some(key.to_owned()) } else { None }
-                }).collect::<Vec<_>>()
-            } else {
-                continue
+fn check_for_update<'a>(
+    name: String,
+    wrap: DependencyEntry<'a>,
+    updates: &HashMap<String, Version>
+) -> bool {
+    let new_version = if let Some(v) = updates.get(&name) {
+        v
+    } else {
+        return false // we do not care about this entry
+    };
+
+    match wrap {
+        DependencyEntry::Inline(info) => {
+
+            if !info.contains_key("path") {
+                return false // entry isn't local
             }
-        };
-        let t = root.entry(k).as_table_mut().expect("Just checked. qed");
 
-        for key in keys {
-            match t.entry(&key) {
-                Item::Value(Value::InlineTable(info)) => {
-
-                    if !info.contains_key("path") {
-                        continue // entry isn't local
-                    }
-
-                    let name = {
-                        if let Some(name) = info.get("package").clone() { // is there a rename
-                            name
-                                .as_str()
-                                .expect("Package is always a string, or cargo would have failed before. qed")
-                                .to_owned()
-                        } else {
-                            key
-                        }
-                    };
-
-                    if let Some(new_version) = updates.get(&name) {
-                        trace!("We changed the version of {:} to {:}", name, new_version);
-                        // this has been changed.
-                        if let Some(v_req) = info.get_mut("version") {
-                            let r = v_req
-                                .as_str()
-                                .ok_or("Version must be string".to_owned())
-                                .and_then(|s| VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e)))
-                                .expect("Cargo enforces us using semver versions. qed");
-                            if !r.matches(new_version) {
-                                trace!("Versions don't match anymore, updating.");
-                                counter += 1;
-                                *v_req = decorated(Value::from(format!("{:}", new_version)), " ", "");
-                            }
-                        } else {
-                            // not yet present, we force set.
-                            trace!("No version found, setting.");
-                            counter += 1;
-                            // having a space here means we formatting it nicer inline
-                            info.get_or_insert(" version", decorated(Value::from(format!("{:}", new_version)), " ", " "));
-                        }
-                    }
-                }, 
-                Item::Table(info) => {
-                    if !info.contains_key("path") {
-                        continue // entry isn't local
-                    }
-
-                    let name = {
-                        if let Some(name) = info.get("package").clone() { // is there a rename
-                            name
-                                .as_str()
-                                .expect("Package is always a string, or cargo would have failed before. qed")
-                                .to_owned()
-                        } else {
-                            key
-                        }
-                    };
-
-                    if let Some(new_version) = updates.get(&name) {
-                        trace!("We changed the version of {:} to {:}", name, new_version);
-                        // this has been changed.
-                        if let Some(v_req) = info.get("version") {
-                            let r = v_req
-                                .as_str()
-                                .ok_or("Version must be string".to_owned())
-                                .and_then(|s| VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e)))
-                                .expect("Cargo enforces us using semver versions. qed");
-                            if r.matches(new_version) {
-                                continue
-                            }
-                            trace!("Versions don't match anymore, updating.");
-                        } else {
-                            trace!("No version found, setting.");
-                        }
-
-                        counter += 1;
-                        info["version"] = Item::Value(decorated(Value::from(format!("{:}", new_version)), " ", ""));
-                    }
+            trace!("We changed the version of {:} to {:}", name, new_version);
+            // this has been changed.
+            if let Some(v_req) = info.get_mut("version") {
+                let r = v_req
+                    .as_str()
+                    .ok_or("Version must be string".to_owned())
+                    .and_then(|s| VersionReq::parse(s)
+                        .map_err(|e| format!("Parsing failed {:}", e)))
+                    .expect("Cargo enforces us using semver versions. qed");
+                if !r.matches(new_version) {
+                    trace!("Versions don't match anymore, updating.");
+                    *v_req = decorated(Value::from(format!("{:}", new_version)), " ", "");
+                    return true
                 }
-                _ => {
-                    trace!("Unsupported dependency format")
+            } else {
+                // not yet present, we force set.
+                trace!("No version found, setting.");
+                // having a space here means we formatting it nicer inline
+                info.get_or_insert(" version", decorated(
+                        Value::from(format!("{:}", new_version)), " ", " "));
+                return true
+            }
+        },
+        DependencyEntry::Table(info) => {
+            if !info.contains_key("path") {
+                return false // entry isn't local
+            }
+            if let Some(new_version) = updates.get(&name) {
+                trace!("We changed the version of {:} to {:}", name, new_version);
+                // this has been changed.
+                if let Some(v_req) = info.get("version") {
+                    let r = v_req
+                        .as_str()
+                        .ok_or("Version must be string".to_owned())
+                        .and_then(|s| VersionReq::parse(s)
+                            .map_err(|e| format!("Parsing failed {:}", e)))
+                        .expect("Cargo enforces us using semver versions. qed");
+                    if r.matches(new_version) {
+                        return false
+                    }
+                    trace!("Versions don't match anymore, updating.");
+                } else {
+                    trace!("No version found, setting.");
                 }
-
+                info["version"] = Item::Value(decorated(
+                        Value::from(format!("{:}", new_version)), " ", ""));
+                return true
             }
         }
-    };
-    counter
+    }
+    false
 }
 
 /// For packages matching predicate set to mapper given version, if any. Update all members dependencies
@@ -126,13 +91,15 @@ where
     let c = ws.config();
 
     let mut updates = HashMap::new();
+
     
     for s in edit_each(ws.members().filter(|p| predicate(p)),
         |p, doc| Ok(mapper(p).map(|nv_version| {
             c.shell()
                 .status("Bumping", format!("{:}: {:} -> {:}", p.name(), p.version(), nv_version))
                 .expect("Writing to the shell would have failed before. qed");
-            doc["package"]["version"] = Item::Value(decorated(Value::from(nv_version.to_string()), " ", ""));
+            doc["package"]["version"] = Item::Value(decorated(
+                    Value::from(nv_version.to_string()), " ", ""));
             (p.name().as_str().to_owned(), nv_version.clone())
         }))
     )? {
@@ -146,7 +113,7 @@ where
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
-        updates_count += updated_deps(root, &updates);
+        updates_count += edit_each_dep(root, |a, b| check_for_update(a, b, &updates));
         
         if let Item::Table(t) = root.entry("target") {
             let keys = t.iter().filter_map(|(k, v)| {
@@ -159,7 +126,7 @@ where
             
             for k in keys {
                 if let Item::Table(root) = t.entry(&k) {
-                    updates_count += updated_deps(root, &updates);
+                    updates_count += edit_each_dep(root,  |a, b| check_for_update(a, b, &updates));
                 }
             };
         }

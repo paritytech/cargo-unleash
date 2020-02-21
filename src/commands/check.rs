@@ -2,9 +2,10 @@ use std::{
     error::Error,
     fs::{read_to_string, write},
     sync::Arc,
+    collections::HashMap,
 }; 
 use log::error;
-use toml_edit::Document;
+use toml_edit::{Document, Value, Item, decorated};
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
@@ -20,24 +21,33 @@ use cargo::{
 };
 use flate2::read::GzDecoder;
 use tar::Archive;
+use crate::util::{edit_each_dep, DependencyEntry};
 
 
-fn inject_replacement(pkg: &Package, replace: &[(String, String)]) -> Result<(), Box<dyn Error>> {
+fn inject_replacement(pkg: &Package, replace: &HashMap<String, String>) -> Result<(), Box<dyn Error>> {
 
     let manifest = pkg.manifest_path();
 
     let document = read_to_string(manifest)?;
     let mut document = document.parse::<Document>()?;
+    let root = document.as_table_mut();
 
-    for (name, path) in replace {
-        if document["dependencies"][name.as_str()]
-            .as_table_mut().is_some()
-        {
-            document["dependencies"][name.as_str()]["path"] = toml_edit::value(path.as_ref());
+    edit_each_dep(root, |name, entry| if let Some(p) = replace.get(&name) {
+        let path = decorated(Value::from(p.clone()), " ", " ");
+        match entry {
+            DependencyEntry::Inline(info) => {
+                info.get_or_insert("path", path);
+            }
+            DependencyEntry::Table(info) => {
+                info["path"] = Item::Value(path);
+            }
         }
-    }
-
-    write(manifest, document.to_string().as_bytes()).map_err(|e| format!("Could not write local manifest: {}", e).into())
+        true
+    } else {
+        false
+    });
+    write(manifest, document.to_string().as_bytes())
+        .map_err(|e| format!("Could not write local manifest: {}", e).into())
 }
 
 
@@ -46,7 +56,7 @@ fn run_check(
     tar: &FileLock,
     opts: &PackageOpts<'_>,
     build_mode: CompileMode, 
-    replace: &[(String, String)]
+    replace: &HashMap<String, String>,
 ) -> Result<(), Box<dyn Error>> {
     let config = ws.config();
     let pkg = ws.current()?;
@@ -145,7 +155,7 @@ pub fn check<'a, 'r>(
         pkg.name().as_str().to_owned(),
         pkg.manifest_path().parent().expect("Folder exists")
             .to_str().expect("Is stringifiable").to_owned())
-    ).collect::<Vec<_>>();
+    ).collect::<HashMap<_,_>>();
 
     let opts = PackageOpts {
         config: c, verify: false, check_metadata: true, list: false,
