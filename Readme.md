@@ -6,7 +6,7 @@
 
 Use `cargo install` to install:
 ```bash
-cargo install https://github.com/gnunicorn/cargo-unleash
+cargo install --git https://github.com/gnunicorn/cargo-unleash
 ```
 
 ## Usage
