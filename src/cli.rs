@@ -195,6 +195,9 @@ pub enum Command {
         /// dry run
         #[structopt(long="dry-run")]
         dry_run: bool,
+        /// dry run
+        #[structopt(long="no-check")]
+        no_check: bool,
         // the token to use for uploading
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>
@@ -457,7 +460,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             commands::check(&packages, &ws, build)
         }
-        Command::EmDragons { dry_run, token, include_dev, build, pkg_opts } => {
+        Command::EmDragons { dry_run, no_check, token, include_dev, build, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev,  &predicate)?;
 
@@ -466,7 +469,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws, build)?;
+            if !no_check {
+                commands::check(&packages, &ws, build)?;
+            }
 
             ws.config().shell().status("Releasing", &packages
                 .iter()
