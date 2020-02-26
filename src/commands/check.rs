@@ -10,6 +10,7 @@ use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
         package::Package,
+        manifest::ManifestMetadata,
         SourceId, Feature, Workspace
     },
     ops::{
@@ -145,6 +146,38 @@ fn run_check(
     Ok(())
 }
 
+// ensure metadata is set
+// https://doc.rust-lang.org/cargo/reference/publishing.html#before-publishing-a-new-crate
+fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
+    let mut bad_fields = Vec::new();
+    if metadata.authors.len() == 0 {
+        bad_fields.push("authors is empty")
+    }
+    match metadata.description {
+        Some(ref s) if s.len() == 0 => bad_fields.push("description is empty"),
+        None => bad_fields.push("description is missing"),
+        _ => {}
+    }
+    match metadata.repository {
+        Some(ref s) if s.len() == 0 => bad_fields.push("repository is empty"),
+        None => bad_fields.push("repository is missing"),
+        _ => {}
+    }
+    match (metadata.license.as_ref(), metadata.license_file.as_ref()) {
+        (Some(ref s), None) | (None, Some(ref s)) if s.len() > 0 => {},
+        (Some(_), Some(_))  => bad_fields.push("You can't have license AND license_file"),
+        _ =>bad_fields.push("Neither license nor license_file is provided"),
+    }
+
+    if bad_fields.len() == 0 {
+        Ok(())
+    } else {
+        Err(bad_fields.join("; "))
+    }
+
+
+}
+
 pub fn check<'a, 'r>(
     packages: &Vec<Package>,
     ws: &Workspace<'a>,
@@ -166,6 +199,9 @@ pub fn check<'a, 'r>(
 
     c.shell().status("Preparing", "Packages")?;
     let builds = packages.iter().map(|pkg| {
+        check_metadata(pkg.manifest().metadata())
+            .map_err(|e|format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
+
         let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)
             .map_err(|e| format!("{:}", e))?;
         c.shell().status("Packing", &pkg).map_err(|e| format!("{:}", e))?;
