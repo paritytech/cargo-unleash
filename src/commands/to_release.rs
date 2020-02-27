@@ -4,32 +4,53 @@ use cargo::{
         package::Package,
     },
 };
-use std::collections::HashMap;
+use std::collections::{
+    HashMap,
+    HashSet,
+};
 use petgraph::Graph;
 use log::{trace, warn};
+use crate::util::fetch_many_cratesio_versions;
 
 /// Generate the packages we should be releasing
 pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: F) -> Result<Vec<Package>, String>
     where F: Fn(&Package) -> bool
 {
-    // based on the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
-    ws.config().shell().status("Resolving", "Dependency Tree").expect("Writing to Shell failed");
+    // inspired by the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
+    ws.config().shell().status("Resolving", "Dependency Tree")
+        .expect("Writing to Shell doesn't fail");
 
     let mut graph = Graph::<Package, (), _, _>::new();
-    let mut map = HashMap::new();
-    let mut ignored = HashMap::new();
 
-    for member in ws.members() {
-        if !predicate(&member) {
-            let _ = ignored.insert(member.name(), member.clone());
-        } else {
-            let index = graph.add_node(member.clone());
-            // Package names assumed to be unique
-            if let Some(_) = map.insert(member.name(), index) {
-                return Err(format!("ERR: {:} found more than once in the package tree", member.name()))
+    let (members, to_ignore): (Vec<_>, Vec<_>) = ws.members().partition(|m| predicate(&m));
+
+    let ignored = to_ignore.into_iter().map(|m| m.name()).collect::<HashSet<_>>();
+
+    ws.config().shell().status("Syncing", "Versions from crates.io")
+        .expect("Writing to Shell doesn't fail");
+
+    let published_versions = fetch_many_cratesio_versions(members
+        .iter()
+        .map(|m| m.name().to_string())
+        .collect::<Vec<_>>()
+    )?;
+    let already_published = members.iter().filter_map(|member| {
+        if let Some(versions) = published_versions.get(&member.name().to_string()) {
+            for v in versions {
+                if &v.version == member.version() {
+                    return Some(member.name())
+                }
             }
         }
-    }
+        None
+    }).collect::<HashSet<_>>();
+
+    let map = members.into_iter().filter_map(|member| {
+        if ignored.contains(&member.name()) || already_published.contains(&member.name()) {
+            return None
+        }
+        Some((member.name(), graph.add_node(member.clone())))
+    }).collect::<HashMap<_, _>>();
 
     for member in ws.members() {
         let current_index = match map.get(&member.name()) {
@@ -41,7 +62,9 @@ pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: F) -> Result<Ve
 
             if let Some(dep_index) = map.get(&dep.package_name()) {
                 graph.add_edge(*current_index, *dep_index, ());
-            } else {
+            } else if already_published.contains(&dep.package_name()) {
+                trace!("All good, it's on crates.io");
+           } else {
                 // we are looking at a dependency, we won't include in the set of
                 // ones we are about to publish. Let's make sure, this won't block
                 // us from doing so though.
@@ -51,7 +74,7 @@ pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: F) -> Result<Ve
                     trace!("All good, it's on crates.io")
                 } else if source.is_path() && dep.is_locked() {
                     // this is a pretty big indicator that something is going to fail later...
-                    if let Some(_) = ignored.get(&dep.package_name()) {
+                    if ignored.contains(&dep.package_name()) {
                         warn!("{} lock depends on {}, which is expected to not be published. This might fail.", member.name(), dep.package_name())
                     }
                 }
