@@ -135,6 +135,18 @@ pub enum Command {
         #[structopt(subcommand)]
         cmd: VersionCommand,
     },
+    /// Add owners for a lot of crates
+    ///
+    ///
+    AddOwner {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+        /// Owner to add to the packages
+        owner: String,
+        // the token to use for uploading
+        #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
+        token: Option<String>
+    },
     /// Deactivate the `[dev-dependencies]`
     ///
     /// Go through the workspace and remove the `[dev-dependencies]`-section from the package
@@ -198,6 +210,9 @@ pub enum Command {
         /// dry run
         #[structopt(long="no-check")]
         no_check: bool,
+        /// Ensure we have the owner set as well
+        #[structopt(long="owner")]
+        add_owner: Option<String>,
         // the token to use for uploading
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>
@@ -306,6 +321,15 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     };
 
     match args.cmd {
+        Command::AddOwner { owner, token, pkg_opts } => {
+            let predicate = make_pkg_predicate(pkg_opts)?;
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            for pkg in ws.members().filter(|p| predicate(p)) {
+                commands::add_owner(ws.config(), &pkg, owner.clone(), token.clone())?;
+            }
+            Ok(())
+        } 
         Command::Set { root_key, name, value, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             let type_value = {
@@ -460,7 +484,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             commands::check(&packages, &ws, build)
         }
-        Command::EmDragons { dry_run, no_check, token, include_dev, build, pkg_opts } => {
+        Command::EmDragons { dry_run, no_check, token, include_dev, add_owner: _, build, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev,  &predicate)?;
 
