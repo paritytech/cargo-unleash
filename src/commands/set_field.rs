@@ -1,11 +1,17 @@
-use std::{error::Error};
-use cargo::core::package::Package;
-use toml_edit::{ Item, Table, Value, decorated};
 use crate::util::edit_each;
+use cargo::core::package::Package;
+use std::error::Error;
+use toml_edit::{decorated, Item, Table, Value};
 
 /// Deactivate the Dev Dependencies Section of the given toml
-pub fn set_field<'a, I>(iter: I, root_key: String, key: String, value: Value) -> Result<(), Box<dyn Error>>
-where I: Iterator<Item=&'a Package>
+pub fn set_field<'a, I>(
+    iter: I,
+    root_key: String,
+    key: String,
+    value: Value,
+) -> Result<(), Box<dyn Error>>
+where
+    I: Iterator<Item = &'a Package>,
 {
     let _ = edit_each(iter, |p, doc| {
         let table = {
@@ -16,7 +22,12 @@ where I: Iterator<Item=&'a Package>
             if let Item::Table(inner) = t {
                 inner
             } else {
-                return Err(format!("Error in manifest of {:}: root key {:} is not a table.", p.name(), root_key).into())
+                return Err(format!(
+                    "Error in manifest of {:}: root key {:} is not a table.",
+                    p.name(),
+                    root_key
+                )
+                .into());
             }
         };
         let entry = table.entry(&key);

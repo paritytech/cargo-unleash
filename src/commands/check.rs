@@ -1,63 +1,61 @@
-use std::{
-    error::Error,
-    fs::{read_to_string, write},
-    sync::Arc,
-    collections::HashMap,
-}; 
-use log::error;
-use toml_edit::{Document, Value, Item, decorated};
+use crate::util::{edit_each_dep, DependencyEntry};
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
-        package::Package,
         manifest::ManifestMetadata,
-        SourceId, Feature, Workspace
+        package::Package,
+        Feature, SourceId, Workspace,
     },
-    ops::{
-        self,
-        package, PackageOpts,
-    },
+    ops::{self, package, PackageOpts},
     sources::PathSource,
     util::{paths, FileLock},
 };
 use flate2::read::GzDecoder;
+use log::error;
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs::{read_to_string, write},
+    sync::Arc,
+};
 use tar::Archive;
-use crate::util::{edit_each_dep, DependencyEntry};
+use toml_edit::{decorated, Document, Item, Value};
 
-fn inject_replacement(pkg: &Package, replace: &HashMap<String, String>)
-    -> Result<(), Box<dyn Error>>
-{
-
+fn inject_replacement(
+    pkg: &Package,
+    replace: &HashMap<String, String>,
+) -> Result<(), Box<dyn Error>> {
     let manifest = pkg.manifest_path();
 
     let document = read_to_string(manifest)?;
     let mut document = document.parse::<Document>()?;
     let root = document.as_table_mut();
 
-    edit_each_dep(root, |name, entry| if let Some(p) = replace.get(&name) {
-        let path = decorated(Value::from(p.clone()), " ", " ");
-        match entry {
-            DependencyEntry::Inline(info) => {
-                info.get_or_insert("path", path);
+    edit_each_dep(root, |name, entry| {
+        if let Some(p) = replace.get(&name) {
+            let path = decorated(Value::from(p.clone()), " ", " ");
+            match entry {
+                DependencyEntry::Inline(info) => {
+                    info.get_or_insert("path", path);
+                }
+                DependencyEntry::Table(info) => {
+                    info["path"] = Item::Value(path);
+                }
             }
-            DependencyEntry::Table(info) => {
-                info["path"] = Item::Value(path);
-            }
+            true
+        } else {
+            false
         }
-        true
-    } else {
-        false
     });
     write(manifest, document.to_string().as_bytes())
         .map_err(|e| format!("Could not write local manifest: {}", e).into())
 }
 
-
 fn run_check(
     ws: &Workspace<'_>,
     tar: &FileLock,
     opts: &PackageOpts<'_>,
-    build_mode: CompileMode, 
+    build_mode: CompileMode,
     replace: &HashMap<String, String>,
 ) -> Result<(), Box<dyn Error>> {
     let config = ws.config();
@@ -140,7 +138,8 @@ fn run_check(
              {:?}\n\n\
              To proceed despite this, pass the `--no-verify` flag.",
             path
-        ).into())
+        )
+        .into());
     }
 
     Ok(())
@@ -164,9 +163,9 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
         _ => {}
     }
     match (metadata.license.as_ref(), metadata.license_file.as_ref()) {
-        (Some(ref s), None) | (None, Some(ref s)) if s.len() > 0 => {},
-        (Some(_), Some(_))  => bad_fields.push("You can't have license AND license_file"),
-        _ =>bad_fields.push("Neither license nor license_file is provided"),
+        (Some(ref s), None) | (None, Some(ref s)) if s.len() > 0 => {}
+        (Some(_), Some(_)) => bad_fields.push("You can't have license AND license_file"),
+        _ => bad_fields.push("Neither license nor license_file is provided"),
     }
 
     if bad_fields.len() == 0 {
@@ -174,8 +173,6 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
     } else {
         Err(bad_fields.join("; "))
     }
-
-
 }
 
 pub fn check<'a, 'r>(
@@ -183,28 +180,45 @@ pub fn check<'a, 'r>(
     ws: &Workspace<'a>,
     build: bool,
 ) -> Result<(), Box<dyn Error>> {
-
     let c = ws.config();
-    let replaces = packages.iter().map(|pkg| (
-        pkg.name().as_str().to_owned(),
-        pkg.manifest_path().parent().expect("Folder exists")
-            .to_str().expect("Is stringifiable").to_owned())
-    ).collect::<HashMap<_,_>>();
+    let replaces = packages
+        .iter()
+        .map(|pkg| {
+            (
+                pkg.name().as_str().to_owned(),
+                pkg.manifest_path()
+                    .parent()
+                    .expect("Folder exists")
+                    .to_str()
+                    .expect("Is stringifiable")
+                    .to_owned(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
 
     let opts = PackageOpts {
-        config: c, verify: false, check_metadata: true, list: false,
-        allow_dirty: true, all_features: false, no_default_features: false,
-        jobs: None, target: None, features: Vec::new(),
+        config: c,
+        verify: false,
+        check_metadata: true,
+        list: false,
+        allow_dirty: true,
+        all_features: false,
+        no_default_features: false,
+        jobs: None,
+        target: None,
+        features: Vec::new(),
     };
 
     c.shell().status("Preparing", "Packages")?;
     let builds = packages.iter().map(|pkg| {
         check_metadata(pkg.manifest().metadata())
-            .map_err(|e|format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
+            .map_err(|e| format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
 
         let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)
             .map_err(|e| format!("{:}", e))?;
-        c.shell().status("Packing", &pkg).map_err(|e| format!("{:}", e))?;
+        c.shell()
+            .status("Packing", &pkg)
+            .map_err(|e| format!("{:}", e))?;
         match package(&pkg_ws, &opts) {
             Ok(Some(rw_lock)) => Ok((pkg_ws, rw_lock)),
             Ok(None) => Err(format!("Failure packing {:}", pkg.name()).into()),
@@ -212,22 +226,32 @@ pub fn check<'a, 'r>(
         }
     });
 
-    let (errors, successes) : (Vec<_>, Vec<_>) = builds.partition(
-            |r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
+    let (errors, successes): (Vec<_>, Vec<_>) =
+        builds.partition(|r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
 
-    let err_count = errors.iter().map(|r| r.as_ref().map_err(|e| error!("{:#?}", e))).count();
+    let err_count = errors
+        .iter()
+        .map(|r| r.as_ref().map_err(|e| error!("{:#?}", e)))
+        .count();
     if err_count > 0 {
-        return Err(format!("Packing failed: {} Errors found", err_count).into())
+        return Err(format!("Packing failed: {} Errors found", err_count).into());
     };
-    
-    let build_mode = if build { CompileMode::Build } else { CompileMode::Check { test: false } };
+
+    let build_mode = if build {
+        CompileMode::Build
+    } else {
+        CompileMode::Check { test: false }
+    };
 
     c.shell().status("Checking", "Packages")?;
     for (pkg_ws, rw_lock) in successes.iter().filter_map(|e| e.as_ref().ok()) {
-        c.shell().status("Verfying", pkg_ws.current()
-            .expect("We've build localised workspaces. qed"))?;
+        c.shell().status(
+            "Verfying",
+            pkg_ws
+                .current()
+                .expect("We've build localised workspaces. qed"),
+        )?;
         run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
     }
     Ok(())
 }
-
