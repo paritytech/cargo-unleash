@@ -6,6 +6,9 @@ edition = "2018"
 license = "GPL-3.0"
 repository ="https://github.com/gnunicorn/cargo-unleash"
 description = "Tooling to manage releasing of crates in massiv workspaces/monorepos"
+readme = "Readme.md"
+keywords = ["cargo", "publishing", "unleash", "workspaces", "monorepo", "dragons"]
+categories = ["development-tools", "development-tools::cargo-plugins", ]
 
 [[bin]]
 name = "cargo-unleash"
