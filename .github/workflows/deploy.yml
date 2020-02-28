@@ -1,0 +1,28 @@
+on: 
+  push:
+    tags:
+      - v*
+
+name: Deploy
+
+jobs:
+  deploy:
+    name: Deploying
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Deploy by self
+        uses: actions-rs/cargo@v1
+
+        env: # Or as an environment variable
+          CRATES_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        with:
+          command: run
+          args: --release -- em-dragons
