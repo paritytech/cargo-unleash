@@ -484,7 +484,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
 
             commands::check(&packages, &ws, build)
         }
-        Command::EmDragons { dry_run, no_check, token, include_dev, add_owner: _, build, pkg_opts } => {
+        Command::EmDragons { dry_run, no_check, token, include_dev, add_owner, build, pkg_opts } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev,  &predicate)?;
 
@@ -504,7 +504,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .join(", ")
             )?;
 
-            commands::release(packages, ws, dry_run, token)
+            commands::release(packages, ws, dry_run, add_owner, token)
         }
     }
 }

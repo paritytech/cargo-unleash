@@ -8,6 +8,7 @@ use cargo::{
         publish, PublishOpts,
     }
 };
+use crate::commands::add_owner;
 
 
 pub fn release<'a>(
@@ -15,10 +16,11 @@ pub fn release<'a>(
     ws: Workspace<'a>,
     dry_run: bool,
     token: Option<String>,
+    owner: Option<String>
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let opts = PublishOpts {
-        verify: false, token, dry_run, config: c,
+        verify: false, token: token.clone(), dry_run, config: c,
         allow_dirty: true, all_features: false, no_default_features: false,
         index: None, jobs: None, target: None, registry: None, features: Vec::new(),
     };
@@ -43,6 +45,9 @@ pub fn release<'a>(
         let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)?;
         c.shell().status("Publishing", &pkg)?;
         publish(&pkg_ws, &opts)?;
+        if let Some(ref o) = owner {
+            add_owner(c, &pkg, o.clone(), token.clone())?;
+        }
     }
     Ok(())
 }
