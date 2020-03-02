@@ -48,6 +48,7 @@ where
     F: Fn(String, Option<String>, DependencyEntry) -> DependencyAction,
 {
     let mut counter = 0;
+    let mut removed = Vec::new();
     for k in vec!["dependencies", "dev-dependencies", "build-dependencies"] {
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
@@ -67,7 +68,7 @@ where
         let t = root.entry(k).as_table_mut().expect("Just checked. qed");
 
         for key in keys {
-            let action = match t.entry(&key) {
+            let (name, action) = match t.entry(&key) {
                 Item::Value(Value::InlineTable(info)) => {
                     let (name, alias) = {
                         if let Some(name) = info.get("package").clone() {
@@ -81,7 +82,7 @@ where
                             (key.clone(), None)
                         }
                     };
-                    f(name, alias, DependencyEntry::Inline(info))
+                    (name.clone(), f(name, alias, DependencyEntry::Inline(info)))
                 }
                 Item::Table(info) => {
                     let (name, alias) = {
@@ -97,21 +98,55 @@ where
                         }
                     };
 
-                    f(name, alias, DependencyEntry::Table(info))
+                    (name.clone(), f(name, alias, DependencyEntry::Table(info)))
                 }
                 _ => {
                     warn!("Unsupported dependency format");
-                    DependencyAction::Untouched
+                    (key, DependencyAction::Untouched)
                 }
             };
 
             if action == DependencyAction::Remove {
-                t.remove(&key);
+                t.remove(&name);
+                removed.push(name);
             }
             if action != DependencyAction::Untouched {
                 counter += 1;
             }
         }
+    }
+
+    if !removed.is_empty() {
+        if let Item::Table(features) = root.entry("features") {
+            let keys = features.iter().map(|(k, _v)| k.to_owned()).collect::<Vec<_>>();
+            print!("keys: {:?}", keys);
+            for feat in keys {
+                if let Item::Value(Value::Array(deps)) = features.entry(&feat) {
+                    print!("array: {:} in {:}", deps, feat);
+                    let mut to_remove = Vec::new();
+                    for (idx, dep) in deps.iter().enumerate() {
+                        if let Value::String(s) = dep {
+                            if let Some(s) = s.value().trim().split("/").next() {
+                                print!("checking: {:}", s);
+                                if removed.contains(&s.to_owned()) {
+                                    print!("checked in: {:} – {:}", s, idx);
+                                    to_remove.push(idx);
+                                }
+                            }
+                        }
+                    }
+                    if !to_remove.is_empty() {
+                        // remove starting from the end:
+                        to_remove.reverse();
+                        for idx in to_remove {
+                            print!("removing {:}", idx);
+                            deps.remove(idx);
+                        }
+                    }
+                }
+            }
+        }
+        
     }
     counter
 }
