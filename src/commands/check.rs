@@ -31,7 +31,7 @@ fn inject_replacement(
     let mut document = document.parse::<Document>()?;
     let root = document.as_table_mut();
 
-    edit_each_dep(root, |name, entry| {
+    edit_each_dep(root, |name, _,entry| {
         if let Some(p) = replace.get(&name) {
             let path = decorated(Value::from(p.clone()), " ", " ");
             match entry {

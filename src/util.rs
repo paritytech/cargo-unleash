@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::{collections::HashMap, error::Error, fs, time::Duration};
 use tokio::runtime::Runtime;
 use toml_edit::{Document, InlineTable, Item, Table, Value};
+use futures::future::FutureExt;
 
 /// Run f on every package's manifest, write the doc. Fail on first error
 pub fn edit_each<'a, I, F, R>(iter: I, f: F) -> Result<Vec<R>, Box<dyn Error>>
@@ -33,7 +34,7 @@ pub enum DependencyEntry<'a> {
 /// to f. Return the counter of how many times f returned true.
 pub fn edit_each_dep<'a, F>(root: &'a mut Table, f: F) -> u32
 where
-    F: Fn(String, DependencyEntry) -> bool,
+    F: Fn(String, Option<String>, DependencyEntry) -> bool,
 {
     let mut counter = 0;
     for k in vec!["dependencies", "dev-dependencies", "build-dependencies"] {
@@ -57,35 +58,37 @@ where
         for key in keys {
             match t.entry(&key) {
                 Item::Value(Value::InlineTable(info)) => {
-                    let name = {
+                    let (name, alias) = {
                         if let Some(name) = info.get("package").clone() {
                             // is there a rename
-                            name
+                            (name
                                 .as_str()
                                 .expect("Package is always a string, or cargo would have failed before. qed")
-                                .to_owned()
+                                .to_owned(),
+                            Some(key))
                         } else {
-                            key
+                            (key, None)
                         }
                     };
-                    if f(name, DependencyEntry::Inline(info)) {
+                    if f(name, alias, DependencyEntry::Inline(info)) {
                         counter += 1;
                     }
                 }
                 Item::Table(info) => {
-                    let name = {
+                    let (name, alias) = {
                         if let Some(name) = info.get("package").clone() {
                             // is there a rename
-                            name
+                            (name
                                 .as_str()
                                 .expect("Package is always a string, or cargo would have failed before. qed")
-                                .to_owned()
+                                .to_owned(),
+                            Some(key))
                         } else {
-                            key
+                            (key, None)
                         }
                     };
 
-                    if f(name, DependencyEntry::Table(info)) {
+                    if f(name, alias, DependencyEntry::Table(info)) {
                         counter += 1;
                     }
                 }
@@ -141,7 +144,6 @@ async fn fetch(client: reqwest::Client, name: String) -> Result<Vec<Version>, St
         }
     }
 }
-use futures::future::FutureExt;
 
 async fn fetch_cratesio_versions(
     crates: Vec<String>,

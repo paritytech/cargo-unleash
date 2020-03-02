@@ -5,6 +5,7 @@ mod release;
 mod set_field;
 mod to_release;
 mod version;
+mod clean_deps;
 
 pub use add_owner::add_owner;
 pub use check::check;
@@ -13,3 +14,4 @@ pub use release::release;
 pub use set_field::set_field;
 pub use to_release::packages_to_release;
 pub use version::set_version;
+pub use clean_deps::clean_up_unused_dependencies;

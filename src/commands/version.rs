@@ -114,7 +114,7 @@ where
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
-        updates_count += edit_each_dep(root, |a, b| check_for_update(a, b, &updates));
+        updates_count += edit_each_dep(root, |a, _,  b| check_for_update(a, b, &updates));
 
         if let Item::Table(t) = root.entry("target") {
             let keys = t
@@ -130,7 +130,7 @@ where
 
             for k in keys {
                 if let Item::Table(root) = t.entry(&k) {
-                    updates_count += edit_each_dep(root, |a, b| check_for_update(a, b, &updates));
+                    updates_count += edit_each_dep(root, |a, _, b| check_for_update(a, b, &updates));
                 }
             }
         }
