@@ -148,6 +148,11 @@ pub enum Command {
     CleanDeps {
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
+        /// Do only check if you'd clean up. 
+        ///
+        /// Abort if you found unused dependencies
+        #[structopt(long = "check")]
+        check_only: bool
     },
     /// Calculate the packages and the order in which to release
     ///
@@ -331,11 +336,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     match args.cmd {
         Command::CleanDeps {
             pkg_opts,
+            check_only,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            commands::clean_up_unused_dependencies(&ws, predicate)
+            commands::clean_up_unused_dependencies(&ws, predicate, check_only)
         },
         Command::AddOwner {
             owner,

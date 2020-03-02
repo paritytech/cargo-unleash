@@ -1,4 +1,4 @@
-use crate::util::{edit_each_dep, DependencyEntry};
+use crate::util::{edit_each_dep, DependencyEntry, DependencyAction};
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
@@ -42,9 +42,9 @@ fn inject_replacement(
                     info["path"] = Item::Value(path);
                 }
             }
-            true
+            DependencyAction::Mutated
         } else {
-            false
+            DependencyAction::Untouched
         }
     });
     write(manifest, document.to_string().as_bytes())

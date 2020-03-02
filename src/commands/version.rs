@@ -1,4 +1,4 @@
-use crate::util::{edit_each, edit_each_dep, DependencyEntry};
+use crate::util::{edit_each, edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::core::{package::Package, Workspace};
 use log::trace;
 use semver::{Version, VersionReq};
@@ -9,17 +9,17 @@ fn check_for_update<'a>(
     name: String,
     wrap: DependencyEntry<'a>,
     updates: &HashMap<String, Version>,
-) -> bool {
+) -> DependencyAction {
     let new_version = if let Some(v) = updates.get(&name) {
         v
     } else {
-        return false; // we do not care about this entry
+        return DependencyAction::Untouched; // we do not care about this entry
     };
 
     match wrap {
         DependencyEntry::Inline(info) => {
             if !info.contains_key("path") {
-                return false; // entry isn't local
+                return DependencyAction::Untouched; // entry isn't local
             }
 
             trace!("We changed the version of {:} to {:}", name, new_version);
@@ -35,7 +35,7 @@ fn check_for_update<'a>(
                 if !r.matches(new_version) {
                     trace!("Versions don't match anymore, updating.");
                     *v_req = decorated(Value::from(format!("{:}", new_version)), " ", "");
-                    return true;
+                    return DependencyAction::Mutated;
                 }
             } else {
                 // not yet present, we force set.
@@ -45,12 +45,12 @@ fn check_for_update<'a>(
                     " version",
                     decorated(Value::from(format!("{:}", new_version)), " ", " "),
                 );
-                return true;
+                return DependencyAction::Mutated;
             }
         }
         DependencyEntry::Table(info) => {
             if !info.contains_key("path") {
-                return false; // entry isn't local
+                return DependencyAction::Untouched; // entry isn't local
             }
             if let Some(new_version) = updates.get(&name) {
                 trace!("We changed the version of {:} to {:}", name, new_version);
@@ -64,7 +64,7 @@ fn check_for_update<'a>(
                         })
                         .expect("Cargo enforces us using semver versions. qed");
                     if r.matches(new_version) {
-                        return false;
+                        return DependencyAction::Untouched;
                     }
                     trace!("Versions don't match anymore, updating.");
                 } else {
@@ -72,11 +72,11 @@ fn check_for_update<'a>(
                 }
                 info["version"] =
                     Item::Value(decorated(Value::from(format!("{:}", new_version)), " ", ""));
-                return true;
+                return DependencyAction::Mutated;
             }
         }
     }
-    false
+    DependencyAction::Untouched
 }
 
 /// For packages matching predicate set to mapper given version, if any. Update all members dependencies
