@@ -1,4 +1,4 @@
-use crate::util::fetch_many_cratesio_versions;
+use crate::util::{members_deep, fetch_many_cratesio_versions};
 use cargo::core::{package::Package, Workspace};
 use log::{trace, warn};
 use petgraph::Graph;
@@ -16,8 +16,9 @@ where
         .expect("Writing to Shell doesn't fail");
 
     let mut graph = Graph::<Package, (), _, _>::new();
+    let members = members_deep(ws);
 
-    let (members, to_ignore): (Vec<_>, Vec<_>) = ws.members().partition(|m| predicate(&m));
+    let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(&m));
 
     let ignored = to_ignore
         .into_iter()
@@ -59,7 +60,7 @@ where
         })
         .collect::<HashMap<_, _>>();
 
-    for member in ws.members() {
+    for member in members_deep(ws).iter() {
         let current_index = match map.get(&member.name()) {
             Some(i) => i,
             _ => continue, // ignore entries we are not expected to publish

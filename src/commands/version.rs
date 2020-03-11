@@ -1,4 +1,4 @@
-use crate::util::{edit_each, edit_each_dep, DependencyAction, DependencyEntry};
+use crate::util::{members_deep, edit_each, edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::core::{package::Package, Workspace};
 use log::trace;
 use semver::{Version, VersionReq};
@@ -94,7 +94,7 @@ where
 {
     let c = ws.config();
 
-    let updates = edit_each(ws.members().filter(|p| predicate(p)), |p, doc| {
+    let updates = edit_each(members_deep(ws).iter().filter(|p| predicate(p)), |p, doc| {
         Ok(mapper(p).map(|nv_version| {
             c.shell()
                 .status(
@@ -112,7 +112,7 @@ where
     .collect::<HashMap<_, _>>();
 
     c.shell().status("Updating", "Dependency tree")?;
-    edit_each(ws.members(), |p, doc| {
+    edit_each(members_deep(ws).iter(), |p, doc| {
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;

@@ -1,4 +1,4 @@
-use crate::util::{edit_each, edit_each_dep, DependencyAction};
+use crate::util::{members_deep, edit_each, edit_each_dep, DependencyAction};
 use cargo::core::{package::Package, Workspace};
 // use log::trace;
 use std::{
@@ -18,7 +18,7 @@ where
     let c = ws.config();
     
     // inspired by https://gist.github.com/sinkuu/8083240257c485c9f928744b41bbac98
-    let total = edit_each(ws.members().filter(|p| predicate(p)), |p, doc| {
+    let total = edit_each(members_deep(ws).iter().filter(|p| predicate(p)), |p, doc| {
         c.shell().status("Checking", p.name())?;
         let source_path = p.root();
         let root = doc.as_table_mut();
