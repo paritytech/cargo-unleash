@@ -9,6 +9,7 @@ fn check_for_update<'a>(
     name: String,
     wrap: DependencyEntry<'a>,
     updates: &HashMap<String, Version>,
+    force_update: bool
 ) -> DependencyAction {
     let new_version = if let Some(v) = updates.get(&name) {
         v
@@ -32,7 +33,7 @@ fn check_for_update<'a>(
                         VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e))
                     })
                     .expect("Cargo enforces us using semver versions. qed");
-                if !r.matches(new_version) {
+                if force_update || !r.matches(new_version) {
                     trace!("Versions don't match anymore, updating.");
                     *v_req = decorated(Value::from(format!("{:}", new_version)), " ", "");
                     return DependencyAction::Mutated;
@@ -63,7 +64,7 @@ fn check_for_update<'a>(
                             VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e))
                         })
                         .expect("Cargo enforces us using semver versions. qed");
-                    if r.matches(new_version) {
+                    if !force_update && r.matches(new_version) {
                         return DependencyAction::Untouched;
                     }
                     trace!("Versions don't match anymore, updating.");
@@ -85,6 +86,7 @@ pub fn set_version<'a, M, P>(
     ws: &Workspace<'a>,
     predicate: P,
     mapper: M,
+    force_update: bool,
 ) -> Result<(), Box<dyn Error>>
 where
     P: Fn(&Package) -> bool,
@@ -114,7 +116,7 @@ where
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
-        updates_count += edit_each_dep(root, |a, _,  b| check_for_update(a, b, &updates));
+        updates_count += edit_each_dep(root, |a, _,  b| check_for_update(a, b, &updates, force_update));
 
         if let Item::Table(t) = root.entry("target") {
             let keys = t
@@ -130,7 +132,7 @@ where
 
             for k in keys {
                 if let Item::Table(root) = t.entry(&k) {
-                    updates_count += edit_each_dep(root, |a, _, b| check_for_update(a, b, &updates));
+                    updates_count += edit_each_dep(root, |a, _, b| check_for_update(a, b, &updates, force_update));
                 }
             }
         }
