@@ -1,10 +1,40 @@
-use cargo::core::package::Package;
+use cargo::{
+    core::{
+        Workspace,
+        package::Package,
+    },
+    sources::PathSource,
+};
 use log::warn;
 use serde::Deserialize;
-use std::{collections::HashMap, error::Error, fs, time::Duration};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs,
+    time::Duration
+};
 use tokio::runtime::Runtime;
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 use futures::future::FutureExt;
+
+pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
+    let mut total_list = Vec::new();
+    for m in ws.members() {
+        total_list.push(m.clone());
+        for dep in m.dependencies() {
+            let source = dep.source_id().clone();
+            if source.is_path() {
+                let dst = source.url().to_file_path().expect("It was just checked before. qed");
+                let mut src = PathSource::new(&dst, source, ws.config());
+                let pkg = src.root_package().expect("Path must have a package");
+                if !ws.is_member(&pkg) {
+                    total_list.push(pkg);
+                }
+            }
+        }
+    }
+    total_list
+}
 
 /// Run f on every package's manifest, write the doc. Fail on first error
 pub fn edit_each<'a, I, F, R>(iter: I, f: F) -> Result<Vec<R>, Box<dyn Error>>

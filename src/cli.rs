@@ -155,6 +155,16 @@ pub enum Command {
         /// Value to set it, too
         value: String,
     },
+    /// Rename a package
+    ///
+    /// Update the internally used references to the package by adding an `package = ` entry
+    /// to the dependencies.
+    Rename {
+        /// Name of the field
+        old_name: String,
+        /// Value to set it, too
+        new_name: String,
+    },
     /// Messing with versioning
     ///
     /// Change versions as requested, then update all package's dependencies
@@ -402,6 +412,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             value,
             pkg_opts,
         } => {
+            if name == "name".to_owned() {
+                return Err("To change the name please use the rename command!".into());
+            }
             let predicate = make_pkg_predicate(pkg_opts)?;
             let type_value = {
                 if &value == "true" {
@@ -425,7 +438,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 type_value,
             )
         }
+        Command::Rename { old_name, new_name } => {
+            let predicate = |p: &Package| p.name().to_string().trim() == old_name;
+            let renamer = |_p: &Package| Some(new_name.clone()) ;
 
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            commands::rename(&ws, predicate, renamer)
+        }
         Command::Version { cmd } => {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
