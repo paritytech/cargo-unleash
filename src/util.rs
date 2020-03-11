@@ -119,17 +119,13 @@ where
     if !removed.is_empty() {
         if let Item::Table(features) = root.entry("features") {
             let keys = features.iter().map(|(k, _v)| k.to_owned()).collect::<Vec<_>>();
-            print!("keys: {:?}", keys);
             for feat in keys {
                 if let Item::Value(Value::Array(deps)) = features.entry(&feat) {
-                    print!("array: {:} in {:}", deps, feat);
                     let mut to_remove = Vec::new();
                     for (idx, dep) in deps.iter().enumerate() {
                         if let Value::String(s) = dep {
                             if let Some(s) = s.value().trim().split("/").next() {
-                                print!("checking: {:}", s);
                                 if removed.contains(&s.to_owned()) {
-                                    print!("checked in: {:} – {:}", s, idx);
                                     to_remove.push(idx);
                                 }
                             }
@@ -139,7 +135,6 @@ where
                         // remove starting from the end:
                         to_remove.reverse();
                         for idx in to_remove {
-                            print!("removing {:}", idx);
                             deps.remove(idx);
                         }
                     }
