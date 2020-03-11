@@ -1,4 +1,4 @@
-use crate::util::{members_deep, edit_each, edit_each_dep, DependencyAction, DependencyEntry};
+use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry};
 use cargo::core::{package::Package, Workspace};
 use log::trace;
 use semver::{Version, VersionReq};
@@ -9,7 +9,7 @@ fn check_for_update<'a>(
     name: String,
     wrap: DependencyEntry<'a>,
     updates: &HashMap<String, Version>,
-    force_update: bool
+    force_update: bool,
 ) -> DependencyAction {
     let new_version = if let Some(v) = updates.get(&name) {
         v
@@ -94,19 +94,22 @@ where
 {
     let c = ws.config();
 
-    let updates = edit_each(members_deep(ws).iter().filter(|p| predicate(p)), |p, doc| {
-        Ok(mapper(p).map(|nv_version| {
-            c.shell()
-                .status(
-                    "Bumping",
-                    format!("{:}: {:} -> {:}", p.name(), p.version(), nv_version),
-                )
-                .expect("Writing to the shell would have failed before. qed");
-            doc["package"]["version"] =
-                Item::Value(decorated(Value::from(nv_version.to_string()), " ", ""));
-            (p.name().as_str().to_owned(), nv_version.clone())
-        }))
-    })?
+    let updates = edit_each(
+        members_deep(ws).iter().filter(|p| predicate(p)),
+        |p, doc| {
+            Ok(mapper(p).map(|nv_version| {
+                c.shell()
+                    .status(
+                        "Bumping",
+                        format!("{:}: {:} -> {:}", p.name(), p.version(), nv_version),
+                    )
+                    .expect("Writing to the shell would have failed before. qed");
+                doc["package"]["version"] =
+                    Item::Value(decorated(Value::from(nv_version.to_string()), " ", ""));
+                (p.name().as_str().to_owned(), nv_version.clone())
+            }))
+        },
+    )?
     .into_iter()
     .filter_map(|s| s)
     .collect::<HashMap<_, _>>();
@@ -116,7 +119,9 @@ where
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
-        updates_count += edit_each_dep(root, |a, _,  b| check_for_update(a, b, &updates, force_update));
+        updates_count += edit_each_dep(root, |a, _, b| {
+            check_for_update(a, b, &updates, force_update)
+        });
 
         if let Item::Table(t) = root.entry("target") {
             let keys = t
@@ -132,7 +137,9 @@ where
 
             for k in keys {
                 if let Item::Table(root) = t.entry(&k) {
-                    updates_count += edit_each_dep(root, |a, _, b| check_for_update(a, b, &updates, force_update));
+                    updates_count += edit_each_dep(root, |a, _, b| {
+                        check_for_update(a, b, &updates, force_update)
+                    });
                 }
             }
         }

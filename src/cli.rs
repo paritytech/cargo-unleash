@@ -56,7 +56,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
     BumpPre {
@@ -66,7 +66,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Increase the patch version, unset prerelease
     BumpPatch {
@@ -76,7 +76,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Increase the minor version, unset prerelease and patch
     BumpMinor {
@@ -86,7 +86,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Increase the major version, unset prerelease, minor and patch
     BumpMajor {
@@ -96,7 +96,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Hard set version to given string
     Set {
@@ -108,7 +108,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Set the pre-release to string
     SetPre {
@@ -121,7 +121,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
     /// Set the metadata to string
     SetBuild {
@@ -134,7 +134,7 @@ pub enum VersionCommand {
         ///
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long = "force-update")]
-        force_update: bool
+        force_update: bool,
     },
 }
 
@@ -198,11 +198,11 @@ pub enum Command {
     CleanDeps {
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
-        /// Do only check if you'd clean up. 
+        /// Do only check if you'd clean up.
         ///
         /// Abort if you found unused dependencies
         #[structopt(long = "check")]
-        check_only: bool
+        check_only: bool,
     },
     /// Calculate the packages and the order in which to release
     ///
@@ -392,7 +392,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             commands::clean_up_unused_dependencies(&ws, predicate, check_only)
-        },
+        }
         Command::AddOwner {
             owner,
             token,
@@ -440,7 +440,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         }
         Command::Rename { old_name, new_name } => {
             let predicate = |p: &Package| p.name().to_string().trim() == old_name;
-            let renamer = |_p: &Package| Some(new_name.clone()) ;
+            let renamer = |_p: &Package| Some(new_name.clone());
 
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
@@ -450,11 +450,23 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             match cmd {
-                VersionCommand::Set { pkg_opts, force_update, version } => {
+                VersionCommand::Set {
+                    pkg_opts,
+                    force_update,
+                    version,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
-                    commands::set_version(&ws, |p| predicate(p), |_| Some(version.clone()), force_update)
+                    commands::set_version(
+                        &ws,
+                        |p| predicate(p),
+                        |_| Some(version.clone()),
+                        force_update,
+                    )
                 }
-                VersionCommand::BumpPre { pkg_opts, force_update } => {
+                VersionCommand::BumpPre {
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,
@@ -480,7 +492,10 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         force_update,
                     )
                 }
-                VersionCommand::BumpPatch { pkg_opts, force_update } => {
+                VersionCommand::BumpPatch {
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,
@@ -491,10 +506,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                             v.increment_patch();
                             Some(v)
                         },
-                        force_update
+                        force_update,
                     )
                 }
-                VersionCommand::BumpMinor { pkg_opts, force_update } => {
+                VersionCommand::BumpMinor {
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,
@@ -505,10 +523,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                             v.increment_minor();
                             Some(v)
                         },
-                        force_update
+                        force_update,
                     )
                 }
-                VersionCommand::BumpMajor { pkg_opts, force_update } => {
+                VersionCommand::BumpMajor {
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,
@@ -519,10 +540,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                             v.increment_major();
                             Some(v)
                         },
-                        force_update
+                        force_update,
                     )
                 }
-                VersionCommand::SetPre { pre, pkg_opts, force_update } => {
+                VersionCommand::SetPre {
+                    pre,
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,
@@ -532,10 +557,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                             v.pre = vec![pre.clone()];
                             Some(v)
                         },
-                        force_update
+                        force_update,
                     )
                 }
-                VersionCommand::SetBuild { meta, pkg_opts, force_update } => {
+                VersionCommand::SetBuild {
+                    meta,
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,
@@ -545,10 +574,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                             v.build = vec![meta.clone()];
                             Some(v)
                         },
-                        force_update
+                        force_update,
                     )
                 }
-                VersionCommand::Release { pkg_opts, force_update } => {
+                VersionCommand::Release {
+                    pkg_opts,
+                    force_update,
+                } => {
                     let predicate = make_pkg_predicate(pkg_opts)?;
                     commands::set_version(
                         &ws,

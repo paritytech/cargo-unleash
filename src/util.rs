@@ -1,21 +1,13 @@
 use cargo::{
-    core::{
-        Workspace,
-        package::Package,
-    },
+    core::{package::Package, Workspace},
     sources::PathSource,
 };
+use futures::future::FutureExt;
 use log::warn;
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    error::Error,
-    fs,
-    time::Duration
-};
+use std::{collections::HashMap, error::Error, fs, time::Duration};
 use tokio::runtime::Runtime;
 use toml_edit::{Document, InlineTable, Item, Table, Value};
-use futures::future::FutureExt;
 
 pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
     let mut total_list = Vec::new();
@@ -24,7 +16,10 @@ pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
         for dep in m.dependencies() {
             let source = dep.source_id().clone();
             if source.is_path() {
-                let dst = source.url().to_file_path().expect("It was just checked before. qed");
+                let dst = source
+                    .url()
+                    .to_file_path()
+                    .expect("It was just checked before. qed");
                 let mut src = PathSource::new(&dst, source, ws.config());
                 let pkg = src.root_package().expect("Path must have a package");
                 if !ws.is_member(&pkg) {
@@ -67,7 +62,7 @@ pub enum DependencyAction {
     /// Entry was changed, needs to be saved
     Mutated,
     /// Remove this entry and save the manifest
-    Remove
+    Remove,
 }
 
 /// Iterate through the dependency sections of root, find each
@@ -148,7 +143,10 @@ where
 
     if !removed.is_empty() {
         if let Item::Table(features) = root.entry("features") {
-            let keys = features.iter().map(|(k, _v)| k.to_owned()).collect::<Vec<_>>();
+            let keys = features
+                .iter()
+                .map(|(k, _v)| k.to_owned())
+                .collect::<Vec<_>>();
             for feat in keys {
                 if let Item::Value(Value::Array(deps)) = features.entry(&feat) {
                     let mut to_remove = Vec::new();
@@ -171,7 +169,6 @@ where
                 }
             }
         }
-        
     }
     counter
 }

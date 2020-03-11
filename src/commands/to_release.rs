@@ -1,4 +1,4 @@
-use crate::util::{members_deep, fetch_many_cratesio_versions};
+use crate::util::{fetch_many_cratesio_versions, members_deep};
 use cargo::core::{package::Package, Workspace};
 use log::{trace, warn};
 use petgraph::Graph;

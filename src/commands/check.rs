@@ -1,4 +1,4 @@
-use crate::util::{edit_each_dep, DependencyEntry, DependencyAction};
+use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
@@ -31,7 +31,7 @@ fn inject_replacement(
     let mut document = document.parse::<Document>()?;
     let root = document.as_table_mut();
 
-    edit_each_dep(root, |name, _,entry| {
+    edit_each_dep(root, |name, _, entry| {
         if let Some(p) = replace.get(&name) {
             let path = decorated(Value::from(p.clone()), " ", " ");
             match entry {
