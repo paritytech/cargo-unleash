@@ -10,6 +10,7 @@ use cargo::{
     sources::PathSource,
     util::{paths, FileLock},
 };
+use semver::VersionReq;
 use flate2::read::GzDecoder;
 use log::error;
 use std::{
@@ -145,6 +146,20 @@ fn run_check(
     Ok(())
 }
 
+fn check_dependencies<'a>(package: &'a Package) -> Result<(), String> {
+    let git_deps = package
+        .dependencies()
+        .iter()
+        .filter(|d| d.source_id().is_git() && d.version_req() == &VersionReq::any())
+        .map(|d| format!("{:}", d.package_name()))
+        .collect::<Vec<_>>();
+    if git_deps.len() > 0 {
+        Err(git_deps.join(", "))
+    } else {
+        Ok(())
+    }
+}
+
 // ensure metadata is set
 // https://doc.rust-lang.org/cargo/reference/publishing.html#before-publishing-a-new-crate
 fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
@@ -209,7 +224,27 @@ pub fn check<'a, 'r>(
         features: Vec::new(),
     };
 
-    c.shell().status("Preparing", "Packages")?;
+    c.shell().status("Checking", "Metadata & Dependencies")?;
+
+    let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
+        if let Err(e) = check_metadata(pkg.manifest().metadata()) {
+            res.push(format!("{:}: Bad metadata: {:}", pkg.name(), e));
+        }
+        if let Err(e) = check_dependencies(pkg) {
+            res.push(format!("{:}: has dependencies defined as git without a version: {:}", pkg.name(), e));
+        }
+        res
+    });
+
+    let errors_count = errors
+        .iter()
+        .map(|s| error!("{:#?}", s))
+        .count();
+
+    if errors.len() > 0 {
+        return Err(format!("Soft checkes failed with {} errors (see above)", errors_count).into());
+    }
+
     let builds = packages.iter().map(|pkg| {
         check_metadata(pkg.manifest().metadata())
             .map_err(|e| format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
@@ -229,12 +264,13 @@ pub fn check<'a, 'r>(
     let (errors, successes): (Vec<_>, Vec<_>) =
         builds.partition(|r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
 
-    let err_count = errors
+    let errors_count = errors
         .iter()
         .map(|r| r.as_ref().map_err(|e| error!("{:#?}", e)))
         .count();
-    if err_count > 0 {
-        return Err(format!("Packing failed: {} Errors found", err_count).into());
+
+    if errors_count > 0 {
+        return Err(format!("Packing failed with {} errors (see above)", errors_count).into());
     };
 
     let build_mode = if build {
