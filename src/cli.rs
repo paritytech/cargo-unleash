@@ -662,7 +662,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     .join(", "),
             )?;
 
-            commands::release(packages, ws, dry_run, add_owner, token)
+            commands::release(packages, ws, dry_run, token, add_owner)
         }
     }
 }
