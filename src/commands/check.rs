@@ -1,4 +1,5 @@
 use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
+use cargo::core::Manifest;
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
@@ -10,9 +11,12 @@ use cargo::{
     sources::PathSource,
     util::{paths, FileLock},
 };
-use semver::VersionReq;
+use cargo_readme::generate_readme;
 use flate2::read::GzDecoder;
 use log::error;
+use semver::VersionReq;
+use std::path::Path;
+use std::path::PathBuf;
 use std::{
     collections::HashMap,
     error::Error,
@@ -231,21 +235,39 @@ pub fn check<'a, 'r>(
             res.push(format!("{:}: Bad metadata: {:}", pkg.name(), e));
         }
         if let Err(e) = check_dependencies(pkg) {
-            res.push(format!("{:}: has dependencies defined as git without a version: {:}", pkg.name(), e));
+            res.push(format!(
+                "{:}: has dependencies defined as git without a version: {:}",
+                pkg.name(),
+                e
+            ));
         }
         res
     });
 
-    let errors_count = errors
-        .iter()
-        .map(|s| error!("{:#?}", s))
-        .count();
+    let errors_count = errors.iter().map(|s| error!("{:#?}", s)).count();
 
     if errors.len() > 0 {
-        return Err(format!("Soft checkes failed with {} errors (see above)", errors_count).into());
+        return Err(format!(
+            "Soft checkes failed with {} errors (see above)",
+            errors_count
+        )
+        .into());
     }
 
     let builds = packages.iter().map(|pkg| {
+        let mut pkg_source =
+            find_entrypoint(pkg.manifest_path().parent().unwrap(), pkg.manifest())?;
+
+        let _readme = generate_readme(
+            ws.target_dir().as_path_unlocked(),
+            &mut pkg_source,
+            None,
+            true,
+            false,
+            true,
+            true,
+        )?;
+
         check_metadata(pkg.manifest().metadata())
             .map_err(|e| format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
 
@@ -290,4 +312,78 @@ pub fn check<'a, 'r>(
         run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
     }
     Ok(())
+}
+
+/// Find the default entrypoiny to read the doc comments from
+///
+/// Try to read entrypoint in the following order:
+/// - src/lib.rs
+/// - src/main.rs
+/// - file defined in the `[lib]` section of Cargo.toml
+/// - file defined in the `[[bin]]` section of Cargo.toml, if there is only one
+///   - if there is more than one `[[bin]]`, an error is returned
+pub fn find_entrypoint(current_dir: &Path, manifest: &Manifest) -> Result<std::fs::File, String> {
+    let entrypoint = find_entrypoint_internal(current_dir, &manifest)?;
+
+    std::fs::File::open(current_dir.join(entrypoint)).map_err(|e| format!("{}", e))
+}
+
+/// Find the default entrypoiny to read the doc comments from
+///
+/// Try to read entrypoint in the following order:
+/// - src/lib.rs
+/// - src/main.rs
+/// - file defined in the `[lib]` section of Cargo.toml
+/// - file defined in the `[[bin]]` section of Cargo.toml, if there is only one
+///   - if there is more than one `[[bin]]`, an error is returned
+pub fn find_entrypoint_internal(
+    current_dir: &Path,
+    manifest: &Manifest,
+) -> Result<PathBuf, String> {
+    // try lib.rs
+    let lib_rs = current_dir.join("src/lib.rs");
+    if lib_rs.exists() {
+        return Ok(lib_rs);
+    }
+
+    // try main.rs
+    let main_rs = current_dir.join("src/main.rs");
+    if main_rs.exists() {
+        return Ok(main_rs);
+    }
+
+    // try lib defined in `Cargo.toml`
+    // if let Some(ManifestLib {
+    //     path: ref lib,
+    //     doc: true,
+    // }) = manifest.lib
+    // {
+    //     return Ok(lib.to_path_buf());
+    // }
+
+    // // try bin defined in `Cargo.toml`
+    // if manifest.bin.len() > 0 {
+    //     let mut bin_list: Vec<_> = manifest
+    //         .bin
+    //         .iter()
+    //         .filter(|b| b.doc == true)
+    //         .map(|b| b.path.clone())
+    //         .collect();
+
+    //     if bin_list.len() > 1 {
+    //         let paths = bin_list
+    //             .iter()
+    //             .map(|p| p.to_string_lossy())
+    //             .collect::<Vec<_>>()
+    //             .join(", ");
+    //         return Err(format!("Multiple binaries found, choose one: [{}]", paths));
+    //     }
+
+    //     if let Some(bin) = bin_list.pop() {
+    //         return Ok(bin);
+    //     }
+    // }
+
+    // if no entrypoint is found, return an error
+    Err("No entrypoint found".to_owned())
 }
