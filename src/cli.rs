@@ -235,13 +235,13 @@ pub enum Command {
         /// build. Set this flag to have it run an actual `build` instead.
         #[structopt(long = "build")]
         build: bool,
-        /// Generate & verify whether the readme files have changed
+        /// Generate & verify whether the readme file has changed.
         ///
-        /// When enabled, this will generate a README file per package
-        /// from the crate's doc comments (using the cargo-readme crate),
-        /// and check whether the existing README (if any) content matches.
-        #[structopt(long = "gen-readmes")]
-        gen_readmes: bool,
+        /// When enabled, this will generate a README file from
+        /// the crate's doc comments (using cargo-readme), and
+        /// check whether the existing README (if any) matches.
+        #[structopt(long = "check-readme")]
+        check_readme: bool,
     },
     /// Unleash 'em dragons
     ///
@@ -273,11 +273,11 @@ pub enum Command {
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>,
         /// Generate & verify whether the readme files have changed.
-        ///
+        /// TODO: /!\ REWRITE /!\
         /// When enabled, this will generate a README file per package
         /// from the crate's doc comments (using the cargo-readme crate).
-        #[structopt(long = "gen-readmes")]
-        gen_readmes: bool,
+        #[structopt(long = "gen-readme")]
+        gen_readme: bool,
     },
 }
 
@@ -361,6 +361,14 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
     }
 
     Ok(Box::new(publish))
+}
+
+fn verify_readme_feature() -> Result<(), String> {
+    if cfg!(feature = "gen-readme") {
+        Ok(())
+    } else {
+        Err("Readme related functionalities not available. Please re-install with gen-readme feature.".to_owned())
+    }
 }
 
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
@@ -635,8 +643,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             include_dev,
             build,
             pkg_opts,
-            gen_readmes,
+            check_readme,
         } => {
+            if check_readme {
+                verify_readme_feature()?;
+            }
+
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
@@ -644,7 +656,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws, build, gen_readmes)
+            commands::check(&packages, &ws, build, check_readme)
         }
         Command::EmDragons {
             dry_run,
@@ -654,8 +666,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             add_owner,
             build,
             pkg_opts,
-            gen_readmes,
+            gen_readme,
         } => {
+            if gen_readme {
+                verify_readme_feature()?;
+            }
+
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
@@ -665,7 +681,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let packages = commands::packages_to_release(&ws, predicate)?;
 
             if !no_check {
-                commands::check(&packages, &ws, build, gen_readmes)?;
+                commands::check(&packages, &ws, build, false)?;
             }
 
             ws.config().shell().status(

@@ -20,5 +20,3 @@ pub use version::set_version;
 
 #[cfg(feature = "gen-readme")]
 mod gen_readme;
-#[cfg(feature = "gen-readme")]
-pub use gen_readme::gen_readme;

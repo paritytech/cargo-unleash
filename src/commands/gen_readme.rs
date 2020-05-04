@@ -2,26 +2,76 @@ use cargo::core::Manifest;
 use cargo_readme::generate_readme;
 use sha1::{Digest, Sha1};
 use std::{
+    fmt::Display,
     fs::{self, File},
     path::{Path, PathBuf},
 };
 
-// pub enum GenerateReadmeMode {
-//     // Do not generate READMEs, skip operation
-//     Skip,
-//     // Generate READMEs for check purpose only,
-//     // files are not written to disk.
-//     CheckOnly,
-//     // Generate README files and write them on disk.
-//     Generate,
-// }
+pub enum GenerateReadmeMode {
+    // Do not generate README, skip operation
+    Skip,
+    // Generate README for check purpose only,
+    // files are not written to disk.
+    CheckOnly,
+    // Generate README files and write them on disk.
+    // GenerateIfMissing,
+    // GenerateAppend,
+    // GenerateOverwrite,
+}
 
-pub fn gen_readme(pkg_path: &Path, pkg_manifest: &Manifest) -> Result<(), String> {
-    let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;
-    let readme = generate_readme(pkg_path, &mut pkg_source, None, true, false, true, true)?;
-    let readme_path = pkg_path.join("README.md");
+#[derive(Debug)]
+pub enum CheckReadmeResult {
+    Skipped,
+    Missing,
+    UpdateNeeded,
+    UpToDate,
+}
+
+impl Display for CheckReadmeResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Skipped => "Skipped",
+                Self::Missing => "Missing",
+                Self::UpdateNeeded => "Updated needed",
+                Self::UpToDate => "Up-to-date",
+                _ => unreachable!(),
+            }
+        )
+    }
+}
+
+pub fn check_readme(
+    pkg_path: &Path,
+    pkg_manifest: &Manifest,
+    mode: GenerateReadmeMode,
+) -> Result<(), String> {
+    match mode {
+        GenerateReadmeMode::Skip => Ok(()),
+        CheckOnly => {
+            let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;
+            let readme_path = pkg_path.join("README.md");
+            match fs::read_to_string(readme_path) {
+                Ok(pkg_readme) => {
+                    let readme =
+                        generate_readme(pkg_path, &mut pkg_source, None, true, false, true, true)?;
+                    let pkg_readme_hash = Sha1::from(pkg_readme);
+                    let gen_readme_hash = Sha1::from(readme);
+                    if pkg_readme_hash == gen_readme_hash {
+                        Ok(())
+                    } else {
+                        Err(CheckReadmeResult::UpdateNeeded.to_string())
+                    }
+                }
+                Err(err) => Err(CheckReadmeResult::Missing.to_string()),
+            }
+        }
+        _ => unreachable!(),
+    }
     //TODO: should delete README when the entire operation is finished ?
-    fs::write(readme_path, readme.as_bytes()).map_err(|e| format!("{:}", e))
+    // fs::write(readme_path, readme.as_bytes()).map_err(|e| format!("{:}", e))
 }
 
 /// Find the default entrypoiny to read the doc comments from

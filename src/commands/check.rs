@@ -194,21 +194,25 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
 }
 
 #[cfg(feature = "gen-readme")]
-fn generate_readme(pkg: &Package) -> Result<(), String> {
+fn check_readme(pkg: &Package) -> Result<(), String> {
     let pkg_path = pkg.manifest_path().parent().unwrap();
-    gen_readme::gen_readme(pkg_path, pkg.manifest())
+    gen_readme::check_readme(
+        pkg_path,
+        pkg.manifest(),
+        gen_readme::GenerateReadmeMode::CheckOnly,
+    )
 }
 
 #[cfg(not(feature = "gen-readme"))]
-fn generate_readme(_pkg: &Package) -> Result<(), String> {
-    Ok(())
+fn check_readme(_pkg: &Package) -> Result<(), String> {
+    unreachable!()
 }
 
 pub fn check<'a, 'r>(
     packages: &Vec<Package>,
     ws: &Workspace<'a>,
     build: bool,
-    gen_readmes: bool,
+    check_readme: bool,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let replaces = packages
@@ -265,15 +269,31 @@ pub fn check<'a, 'r>(
         .into());
     }
 
-    let builds = packages.iter().map(|pkg| {
-        if gen_readmes {
-            c.shell()
-                .status("Generating", format!("README for {:}", pkg.name()))
-                .map_err(|e| format!("{:}", e))?;
-            generate_readme(&pkg)
-                .map_err(|e| format!("{:}: Error generating README: {:}", pkg.name(), e))?;
-        }
+    if check_readme {
+        c.shell().status("Checking", "Readme files")?;
+        let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
+            if let Err(e) = self::check_readme(&pkg) {
+                res.push(format!(
+                    "{:}: Readme file check failed with: {:}",
+                    pkg.name(),
+                    e
+                ));
+            }
+            res
+        });
 
+        let errors_count = errors.iter().map(|s| error!("{:#?}", s)).count();
+
+        if errors.len() > 0 {
+            return Err(format!(
+                "{} readme file(s) need to be updated (see above).",
+                errors_count
+            )
+            .into());
+        }
+    }
+
+    let builds = packages.iter().map(|pkg| {
         check_metadata(pkg.manifest().metadata())
             .map_err(|e| format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
 
