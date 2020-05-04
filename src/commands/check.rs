@@ -1,6 +1,7 @@
 #[cfg(feature = "gen-readme")]
 use crate::commands::gen_readme;
 
+use crate::cli::GenerateReadmeMode;
 use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::{
     core::{
@@ -194,17 +195,13 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
 }
 
 #[cfg(feature = "gen-readme")]
-fn check_readme(pkg: &Package) -> Result<(), String> {
+fn gen_readme(pkg: &Package, readme_mode: &GenerateReadmeMode) -> Result<(), String> {
     let pkg_path = pkg.manifest_path().parent().unwrap();
-    gen_readme::check_readme(
-        pkg_path,
-        pkg.manifest(),
-        gen_readme::GenerateReadmeMode::CheckOnly,
-    )
+    gen_readme::gen_readme(pkg_path, pkg.manifest(), readme_mode)
 }
 
 #[cfg(not(feature = "gen-readme"))]
-fn check_readme(_pkg: &Package) -> Result<(), String> {
+fn gen_readme(_pkg: &Package, _readme_mode: &GenerateReadmeMode) -> Result<(), String> {
     unreachable!()
 }
 
@@ -212,7 +209,7 @@ pub fn check<'a, 'r>(
     packages: &Vec<Package>,
     ws: &Workspace<'a>,
     build: bool,
-    check_readme: bool,
+    readme_mode: GenerateReadmeMode,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let replaces = packages
@@ -269,13 +266,19 @@ pub fn check<'a, 'r>(
         .into());
     }
 
-    if check_readme {
-        c.shell().status("Checking", "Readme files")?;
+    if readme_mode != GenerateReadmeMode::Skip {
+        let status = if readme_mode == GenerateReadmeMode::CheckOnly {
+            "Checking"
+        } else {
+            "Generating"
+        };
+        c.shell().status(status, "Readme files")?;
         let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
-            if let Err(e) = self::check_readme(&pkg) {
+            if let Err(e) = self::gen_readme(&pkg, &readme_mode) {
                 res.push(format!(
-                    "{:}: Readme file check failed with: {:}",
+                    "{:}: {} Readme file failed with: {:}",
                     pkg.name(),
+                    status,
                     e
                 ));
             }

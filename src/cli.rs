@@ -7,8 +7,11 @@ use log::trace;
 use regex::Regex;
 use semver::{Identifier, Version};
 use std::{error::Error, fs, path::PathBuf, str::FromStr};
+use structopt::clap::arg_enum;
 use structopt::StructOpt;
 use toml_edit::Value;
+
+use crate::commands;
 
 fn parse_identifiers(src: &str) -> Identifier {
     Identifier::AlphaNumeric(src.to_owned())
@@ -16,7 +19,22 @@ fn parse_identifiers(src: &str) -> Identifier {
 fn parse_regex(src: &str) -> Result<Regex, String> {
     Regex::new(src).map_err(|e| format!("Parsing Regex failed: {:}", e))
 }
-use crate::commands;
+
+arg_enum! {
+    #[derive(Debug, PartialEq)]
+    pub enum GenerateReadmeMode {
+        // Do not generate Readme, skip operation.
+        Skip,
+        // Generate Readme for check purpose only.
+        CheckOnly,
+        // Generate Readme only if it is missing.
+        GenerateIfMissing,
+        // Generate Readme & append to existing file.
+        GenerateAppend,
+        // Generate Readme & overwrite existing file.
+        GenerateOverwrite,
+    }
+}
 
 #[derive(StructOpt, Debug)]
 pub struct PackageSelectOptions {
@@ -235,11 +253,11 @@ pub enum Command {
         /// build. Set this flag to have it run an actual `build` instead.
         #[structopt(long = "build")]
         build: bool,
-        /// Generate & verify whether the readme file has changed.
+        /// Generate & verify whether the Readme file has changed.
         ///
-        /// When enabled, this will generate a README file from
+        /// When enabled, this will generate a Readme file from
         /// the crate's doc comments (using cargo-readme), and
-        /// check whether the existing README (if any) matches.
+        /// check whether the existing Readme (if any) matches.
         #[structopt(long = "check-readme")]
         check_readme: bool,
     },
@@ -272,12 +290,16 @@ pub enum Command {
         // the token to use for uploading
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>,
-        /// Generate & verify whether the readme files have changed.
-        /// TODO: /!\ REWRITE /!\
-        /// When enabled, this will generate a README file per package
-        /// from the crate's doc comments (using the cargo-readme crate).
+        /// Generate readme file for package.
+        ///
+        /// Depending on the chosen option, this will generate a Readme
+        /// file from the crate's doc comments (using cargo-readme).
         #[structopt(long = "gen-readme")]
-        gen_readme: bool,
+        #[structopt(
+            possible_values = &GenerateReadmeMode::variants(),
+            case_insensitive = true
+        )]
+        gen_readme: GenerateReadmeMode,
     },
 }
 
@@ -363,8 +385,8 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
     Ok(Box::new(publish))
 }
 
-fn verify_readme_feature() -> Result<(), String> {
-    if cfg!(feature = "gen-readme") {
+fn verify_readme_feature(readme_mode: &GenerateReadmeMode) -> Result<(), String> {
+    if readme_mode == &GenerateReadmeMode::Skip || cfg!(feature = "gen-readme") {
         Ok(())
     } else {
         Err("Readme related functionalities not available. Please re-install with gen-readme feature.".to_owned())
@@ -645,9 +667,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             pkg_opts,
             check_readme,
         } => {
-            if check_readme {
-                verify_readme_feature()?;
-            }
+            let readme_mode = if check_readme {
+                GenerateReadmeMode::CheckOnly
+            } else {
+                GenerateReadmeMode::Skip
+            };
+            verify_readme_feature(&readme_mode)?;
 
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -656,7 +681,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws, build, check_readme)
+            commands::check(&packages, &ws, build, readme_mode)
         }
         Command::EmDragons {
             dry_run,
@@ -668,9 +693,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             pkg_opts,
             gen_readme,
         } => {
-            if gen_readme {
-                verify_readme_feature()?;
-            }
+            verify_readme_feature(&gen_readme)?;
 
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -681,7 +704,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let packages = commands::packages_to_release(&ws, predicate)?;
 
             if !no_check {
-                commands::check(&packages, &ws, build, false)?;
+                commands::check(&packages, &ws, build, gen_readme)?;
             }
 
             ws.config().shell().status(

@@ -1,23 +1,11 @@
+use crate::cli::GenerateReadmeMode;
 use cargo::core::Manifest;
-use cargo_readme::generate_readme;
-use sha1::{Digest, Sha1};
+use sha1::Sha1;
 use std::{
     fmt::Display,
     fs::{self, File},
     path::{Path, PathBuf},
 };
-
-pub enum GenerateReadmeMode {
-    // Do not generate README, skip operation
-    Skip,
-    // Generate README for check purpose only,
-    // files are not written to disk.
-    CheckOnly,
-    // Generate README files and write them on disk.
-    // GenerateIfMissing,
-    // GenerateAppend,
-    // GenerateOverwrite,
-}
 
 #[derive(Debug)]
 pub enum CheckReadmeResult {
@@ -37,41 +25,45 @@ impl Display for CheckReadmeResult {
                 Self::Missing => "Missing",
                 Self::UpdateNeeded => "Updated needed",
                 Self::UpToDate => "Up-to-date",
-                _ => unreachable!(),
             }
         )
     }
 }
 
-pub fn check_readme(
+pub fn gen_readme(
     pkg_path: &Path,
     pkg_manifest: &Manifest,
-    mode: GenerateReadmeMode,
+    mode: &GenerateReadmeMode,
 ) -> Result<(), String> {
-    match mode {
-        GenerateReadmeMode::Skip => Ok(()),
-        CheckOnly => {
-            let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;
-            let readme_path = pkg_path.join("README.md");
-            match fs::read_to_string(readme_path) {
-                Ok(pkg_readme) => {
-                    let readme =
-                        generate_readme(pkg_path, &mut pkg_source, None, true, false, true, true)?;
-                    let pkg_readme_hash = Sha1::from(pkg_readme);
-                    let gen_readme_hash = Sha1::from(readme);
-                    if pkg_readme_hash == gen_readme_hash {
-                        Ok(())
-                    } else {
-                        Err(CheckReadmeResult::UpdateNeeded.to_string())
-                    }
+    let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;
+    let readme_path = pkg_path.join("README.md");
+    let pkg_readme = fs::read_to_string(readme_path.clone());
+    match (mode, pkg_readme) {
+        (GenerateReadmeMode::Skip, _) => Ok(()),
+        (GenerateReadmeMode::CheckOnly, pkg_readme) => match pkg_readme {
+            Ok(pkg_readme) => {
+                let new_readme = generate_readme(&pkg_path, &mut pkg_source)?;
+                if Sha1::from(pkg_readme) == Sha1::from(new_readme) {
+                    Ok(())
+                } else {
+                    Err(CheckReadmeResult::UpdateNeeded.to_string())
                 }
-                Err(err) => Err(CheckReadmeResult::Missing.to_string()),
             }
+            Err(_err) => Err(CheckReadmeResult::Missing.to_string()),
+        },
+        (GenerateReadmeMode::GenerateIfMissing, Ok(_existing_readme)) => Ok(()),
+        (mode, existing_res) => {
+            let new_readme = &mut generate_readme(&pkg_path, &mut pkg_source)?;
+            if mode == &GenerateReadmeMode::GenerateAppend && existing_res.is_ok() {
+                *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
+            }
+            fs::write(readme_path, new_readme.as_bytes()).map_err(|e| format!("{:}", e))
         }
-        _ => unreachable!(),
     }
-    //TODO: should delete README when the entire operation is finished ?
-    // fs::write(readme_path, readme.as_bytes()).map_err(|e| format!("{:}", e))
+}
+
+fn generate_readme(pkg_path: &Path, pkg_source: &mut File) -> Result<String, String> {
+    cargo_readme::generate_readme(pkg_path, pkg_source, None, true, false, true, true)
 }
 
 /// Find the default entrypoiny to read the doc comments from
@@ -98,7 +90,7 @@ pub fn find_entrypoint(current_dir: &Path, manifest: &Manifest) -> Result<File, 
 ///   - if there is more than one `[[bin]]`, an error is returned
 pub fn find_entrypoint_internal(
     current_dir: &Path,
-    manifest: &Manifest,
+    _manifest: &Manifest,
 ) -> Result<PathBuf, String> {
     // try lib.rs
     let lib_rs = current_dir.join("src/lib.rs");
