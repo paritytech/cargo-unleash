@@ -1,9 +1,20 @@
 use cargo::core::Manifest;
 use cargo_readme::generate_readme;
+use sha1::{Digest, Sha1};
 use std::{
     fs::{self, File},
     path::{Path, PathBuf},
 };
+
+// pub enum GenerateReadmeMode {
+//     // Do not generate READMEs, skip operation
+//     Skip,
+//     // Generate READMEs for check purpose only,
+//     // files are not written to disk.
+//     CheckOnly,
+//     // Generate README files and write them on disk.
+//     Generate,
+// }
 
 pub fn gen_readme(pkg_path: &Path, pkg_manifest: &Manifest) -> Result<(), String> {
     let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;

@@ -208,6 +208,7 @@ pub fn check<'a, 'r>(
     packages: &Vec<Package>,
     ws: &Workspace<'a>,
     build: bool,
+    gen_readmes: bool,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let replaces = packages
@@ -265,11 +266,13 @@ pub fn check<'a, 'r>(
     }
 
     let builds = packages.iter().map(|pkg| {
-        c.shell()
-            .status("Generating", format!("README for {:}", pkg.name()))
-            .map_err(|e| format!("{:}", e))?;
-        generate_readme(&pkg)
-            .map_err(|e| format!("{:}: Error generating README: {:}", pkg.name(), e))?;
+        if gen_readmes {
+            c.shell()
+                .status("Generating", format!("README for {:}", pkg.name()))
+                .map_err(|e| format!("{:}", e))?;
+            generate_readme(&pkg)
+                .map_err(|e| format!("{:}: Error generating README: {:}", pkg.name(), e))?;
+        }
 
         check_metadata(pkg.manifest().metadata())
             .map_err(|e| format!("{:}: Bad metadata: {:}", pkg.name(), e))?;

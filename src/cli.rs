@@ -235,6 +235,13 @@ pub enum Command {
         /// build. Set this flag to have it run an actual `build` instead.
         #[structopt(long = "build")]
         build: bool,
+        /// Generate & verify whether the readme files have changed
+        ///
+        /// When enabled, this will generate a README file per package
+        /// from the crate's doc comments (using the cargo-readme crate),
+        /// and check whether the existing README (if any) content matches.
+        #[structopt(long = "gen-readmes")]
+        gen_readmes: bool,
     },
     /// Unleash 'em dragons
     ///
@@ -265,6 +272,12 @@ pub enum Command {
         // the token to use for uploading
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>,
+        /// Generate & verify whether the readme files have changed.
+        ///
+        /// When enabled, this will generate a README file per package
+        /// from the crate's doc comments (using the cargo-readme crate).
+        #[structopt(long = "gen-readmes")]
+        gen_readmes: bool,
     },
 }
 
@@ -622,6 +635,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             include_dev,
             build,
             pkg_opts,
+            gen_readmes,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -630,7 +644,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws, build)
+            commands::check(&packages, &ws, build, gen_readmes)
         }
         Command::EmDragons {
             dry_run,
@@ -640,6 +654,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             add_owner,
             build,
             pkg_opts,
+            gen_readmes,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -650,7 +665,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let packages = commands::packages_to_release(&ws, predicate)?;
 
             if !no_check {
-                commands::check(&packages, &ws, build)?;
+                commands::check(&packages, &ws, build, gen_readmes)?;
             }
 
             ws.config().shell().status(

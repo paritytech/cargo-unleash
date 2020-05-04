@@ -178,10 +178,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo-readme"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66dbfc9307f5b2429656e07533613cd3f26803fd2857fc33be22aa2711181d58"
+dependencies = [
+ "clap",
+ "lazy_static",
+ "percent-encoding",
+ "regex",
+ "serde",
+ "serde_derive",
+ "toml",
+]
+
+[[package]]
 name = "cargo-unleash"
 version = "1.0.0-alpha.10"
 dependencies = [
  "cargo",
+ "cargo-readme",
  "flate2",
  "flexi_logger",
  "futures",
@@ -191,6 +207,7 @@ dependencies = [
  "reqwest",
  "semver",
  "serde",
+ "sha1",
  "structopt",
  "tar",
  "tokio",
@@ -1534,6 +1551,12 @@ dependencies = [
  "serde",
  "url",
 ]
+
+[[package]]
+name = "sha1"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
 
 [[package]]
 name = "shell-escape"
