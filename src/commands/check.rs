@@ -1,7 +1,6 @@
 #[cfg(feature = "gen-readme")]
-use crate::commands::gen_readme;
+use crate::commands::readme;
 
-use crate::cli::GenerateReadmeMode;
 use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::{
     core::{
@@ -195,13 +194,13 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
 }
 
 #[cfg(feature = "gen-readme")]
-fn gen_readme(pkg: &Package, readme_mode: &GenerateReadmeMode) -> Result<(), String> {
-    let pkg_path = pkg.manifest_path().parent().unwrap();
-    gen_readme::gen_readme(pkg_path, pkg.manifest(), readme_mode)
+fn check_readme<'a>(ws: &Workspace<'a>, pkg: &Package) -> Result<(), String> {
+    let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
+    readme::check_pkg_readme(ws, pkg_path, pkg.manifest())
 }
 
 #[cfg(not(feature = "gen-readme"))]
-fn gen_readme(_pkg: &Package, _readme_mode: &GenerateReadmeMode) -> Result<(), String> {
+fn check_readme<'a>(_ws: &Workspace<'a>, _pkg: &Package) -> Result<(), String> {
     unreachable!()
 }
 
@@ -209,7 +208,7 @@ pub fn check<'a, 'r>(
     packages: &Vec<Package>,
     ws: &Workspace<'a>,
     build: bool,
-    readme_mode: GenerateReadmeMode,
+    check_readme: bool,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let replaces = packages
@@ -266,19 +265,13 @@ pub fn check<'a, 'r>(
         .into());
     }
 
-    if readme_mode != GenerateReadmeMode::Skip {
-        let status = if readme_mode == GenerateReadmeMode::CheckOnly {
-            "Checking"
-        } else {
-            "Generating"
-        };
-        c.shell().status(status, "Readme files")?;
+    if check_readme {
+        c.shell().status("Checking", "Readme files")?;
         let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
-            if let Err(e) = self::gen_readme(&pkg, &readme_mode) {
+            if let Err(e) = self::check_readme(&ws, &pkg) {
                 res.push(format!(
-                    "{:}: {} Readme file failed with: {:}",
+                    "{:}: Checking Readme file failed with: {:}",
                     pkg.name(),
-                    status,
                     e
                 ));
             }

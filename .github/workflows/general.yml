@@ -23,6 +23,12 @@ jobs:
         continue-on-error: true  # WARNING: only for this example, remove it!
         with:
           command: check
+      
+      - name: Run cargo check (features=gen-readme)
+        uses: actions-rs/cargo@v1
+        continue-on-error: true  # WARNING: only for this example, remove it!
+        with:
+          command: check --features=gen-readme
 
   test:
     name: Test Suite
