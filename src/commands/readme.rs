@@ -24,7 +24,7 @@ impl Display for CheckReadmeResult {
             match self {
                 Self::Skipped => "Skipped",
                 Self::Missing => "Missing",
-                Self::UpdateNeeded => "Updated needed",
+                Self::UpdateNeeded => "Update needed",
                 Self::UpToDate => "Up-to-date",
             }
         )
@@ -38,7 +38,7 @@ pub fn check_pkg_readme<'a>(
 ) -> Result<(), String> {
     let c = ws.config();
 
-    let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;
+    let mut pkg_source = find_entrypoint(pkg_path)?;
     let readme_path = pkg_path.join("README.md");
 
     c.shell()
@@ -88,7 +88,7 @@ pub fn gen_pkg_readme<'a>(
     let c = ws.config();
     let root_path = ws.root();
 
-    let mut pkg_source = find_entrypoint(pkg_path, pkg_manifest)?;
+    let mut pkg_source = find_entrypoint(pkg_path)?;
     let readme_path = pkg_path.join("README.md");
 
     let pkg_readme = fs::read_to_string(readme_path.clone());
@@ -112,7 +112,7 @@ pub fn gen_pkg_readme<'a>(
                         "Readme for {} (template: {:?})",
                         &pkg_manifest.name(),
                         match &template_path {
-                            Some(p) => p.strip_prefix(&root_path).unwrap().to_str().unwrap(),
+                            Some(p) => p.strip_prefix(&root_path).unwrap_or(p).to_str().unwrap(),
                             None => "none found",
                         }
                     ),
@@ -146,28 +146,27 @@ fn generate_readme<'a>(
     )
 }
 
-/// Find the default entrypoiny to read the doc comments from
+/// Find the default entrypoint to read the doc comments from
 ///
 /// Try to read entrypoint in the following order:
 /// - src/lib.rs
 /// - src/main.rs
-/// - file defined in the `[lib]` section of Cargo.toml
-/// - file defined in the `[[bin]]` section of Cargo.toml, if there is only one
-///   - if there is more than one `[[bin]]`, an error is returned
-fn find_entrypoint(current_dir: &Path, manifest: &Manifest) -> Result<File, String> {
-    let entrypoint = find_entrypoint_internal(current_dir, &manifest)?;
+fn find_entrypoint(current_dir: &Path) -> Result<File, String> {
+    let entrypoint = find_entrypoint_internal(current_dir)?;
     File::open(current_dir.join(entrypoint)).map_err(|e| format!("{}", e))
 }
+#[derive(Debug)]
+struct ManifestLib {
+    pub path: PathBuf,
+    pub doc: bool,
+}
 
-/// Find the default entrypoiny to read the doc comments from
+/// Find the default entrypoint to read the doc comments from
 ///
 /// Try to read entrypoint in the following order:
 /// - src/lib.rs
 /// - src/main.rs
-/// - file defined in the `[lib]` section of Cargo.toml
-/// - file defined in the `[[bin]]` section of Cargo.toml, if there is only one
-///   - if there is more than one `[[bin]]`, an error is returned
-fn find_entrypoint_internal(current_dir: &Path, _manifest: &Manifest) -> Result<PathBuf, String> {
+fn find_entrypoint_internal(current_dir: &Path) -> Result<PathBuf, String> {
     // try lib.rs
     let lib_rs = current_dir.join("src/lib.rs");
     if lib_rs.exists() {
@@ -179,38 +178,6 @@ fn find_entrypoint_internal(current_dir: &Path, _manifest: &Manifest) -> Result<
     if main_rs.exists() {
         return Ok(main_rs);
     }
-
-    // try lib defined in `Cargo.toml`
-    // if let Some(ManifestLib {
-    //     path: ref lib,
-    //     doc: true,
-    // }) = manifest.lib
-    // {
-    //     return Ok(lib.to_path_buf());
-    // }
-
-    // try bin defined in `Cargo.toml`
-    // if manifest.bin.len() > 0 {
-    //     let mut bin_list: Vec<_> = manifest
-    //         .bin
-    //         .iter()
-    //         .filter(|b| b.doc == true)
-    //         .map(|b| b.path.clone())
-    //         .collect();
-
-    //     if bin_list.len() > 1 {
-    //         let paths = bin_list
-    //             .iter()
-    //             .map(|p| p.to_string_lossy())
-    //             .collect::<Vec<_>>()
-    //             .join(", ");
-    //         return Err(format!("Multiple binaries found, choose one: [{}]", paths));
-    //     }
-
-    //     if let Some(bin) = bin_list.pop() {
-    //         return Ok(bin);
-    //     }
-    // }
 
     // if no entrypoint is found, return an error
     Err("No entrypoint found".to_owned())
