@@ -3,6 +3,7 @@ use structopt::StructOpt;
 mod cli;
 mod commands;
 mod util;
+mod matcher;
 
 use cli::Opt;
 
