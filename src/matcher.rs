@@ -155,15 +155,6 @@ enum Node {
     Children(Vec<Node>),
 }
 
-impl Node {
-    fn entry(l: LexItem) -> Self {
-        Node::Entry(l)
-    }
-    fn children(v: Vec<Node>) -> Self {
-        Node::Children(v)
-    }
-}
-
 fn traverse<I>(inp: &mut I) -> Result<Node, String>
     where I: Iterator<Item=LexItem>    
 {
@@ -171,18 +162,18 @@ fn traverse<I>(inp: &mut I) -> Result<Node, String>
     while let Some(l) = inp.next() {
         match l {
             LexItem::CloseParen => {
-                return Ok(Node::children(current_nodes))
+                return Ok(Node::Children(current_nodes))
             }
             LexItem::OpenParen => {
                 current_nodes.push(traverse(inp)?);
             },
             _ => {
-                current_nodes.push(Node::entry(l));
+                current_nodes.push(Node::Entry(l));
             }
         }
     }
 
-    Ok(Node::children(current_nodes))
+    Ok(Node::Children(current_nodes))
 }
 
 fn translate(inp: Node) -> Result<Matcher,String> {
@@ -198,33 +189,29 @@ fn translate(inp: Node) -> Result<Matcher,String> {
             let mut matchers = Vec::new();
             while let Some(n) = it.next() {
                 match n {
-                    Node::Entry(l) => {
-                        match l {
-                            LexItem::Token(t) => {
-                                matchers.push(parse_token(t.to_vec())?)
-                            },
-                            LexItem::And => {
-                                let prev = matchers.pop()
-                                .ok_or("no item before and".to_string())?;
-                                let next = translate(
-                                    it.next().ok_or("missing item after end".to_string())?
-                                )?;
-                                matchers.push(
-                                    Matcher::And(prev.into(), next.into())
-                                )
-                            }
-                            LexItem::Or => {
-                                let prev = matchers.pop().ok_or("no item before or".to_string())?;
-                                let next = translate(
-                                    it.next().ok_or("missing item after or".to_string())?
-                                )?;
-                                matchers.push(
-                                    Matcher::Or(prev.into(), next.into())
-                                )
-                            }
-                            _ => unreachable!()
-                        }
+                    Node::Entry(LexItem::Token(t)) => {
+                        matchers.push(parse_token(t.to_vec())?);
+                    },
+                    Node::Entry(LexItem::And) => {
+                        let prev = matchers.pop()
+                        .ok_or("no item before and".to_string())?;
+                        let next = translate(
+                            it.next().ok_or("missing item after end".to_string())?
+                        )?;
+                        matchers.push(
+                            Matcher::And(prev.into(), next.into())
+                        );
                     }
+                    Node::Entry(LexItem::Or) => {
+                        let prev = matchers.pop().ok_or("no item before or".to_string())?;
+                        let next = translate(
+                            it.next().ok_or("missing item after or".to_string())?
+                        )?;
+                        matchers.push(
+                            Matcher::Or(prev.into(), next.into())
+                        );
+                    }
+                    Node::Entry(_) => unreachable!(),
                     _ => {
                         matchers.push(translate(n)?);
                     }
