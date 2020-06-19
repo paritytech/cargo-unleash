@@ -1,4 +1,5 @@
 use semver::Version;
+use std::str::FromStr;
 
 pub struct Package {
     name: String,
@@ -32,8 +33,36 @@ impl Comparator {
     }
 }
 
+pub enum VersionMatch {
+    Full(Version),
+    Major(u64),
+    Minor(u64),
+    Patch(u64),
+    Pre(String),
+    Build(String),
+}
+
+impl VersionMatch {
+    pub fn matches(&self, v: &Version) -> bool {
+        match &*self {
+            VersionMatch::Full(f) => f == v,
+            VersionMatch::Major(m) => &v.major == m,
+            VersionMatch::Minor(m) => &v.minor == m,
+            VersionMatch::Patch(p) => &v.patch == p,
+            VersionMatch::Pre(p) => {
+                let vis = v.pre.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(".");
+                &vis == p
+            },
+            VersionMatch::Build(b) =>  {
+                let vis = v.build.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(".");
+                &vis == b
+            }
+        }
+    }
+}
+
 pub enum Matcher {
-    Version(Version),
+    Version(VersionMatch),
     Name(Comparator),
     And(Box<Matcher>, Box<Matcher>),
     Or(Box<Matcher>, Box<Matcher>)
@@ -43,7 +72,7 @@ pub enum Matcher {
 impl Matcher {
     pub fn matches(&self, pkg: &Package) -> bool {
         match &*self {
-            Matcher::Version(v) =>  pkg.version() == v,
+            Matcher::Version(v) => v.matches(pkg.version()),
             Matcher::Name(comp) =>  comp.matches(pkg.name()),
             Matcher::And(a, b) => a.matches(pkg) && b.matches(pkg),
             Matcher::Or(a, b) => a.matches(pkg) || b.matches(pkg),
@@ -229,9 +258,33 @@ fn parse_token(inp: Vec<char>) -> Result<Matcher, String> {
     let input: String = inp.into_iter().collect();
     if input.starts_with("version=") {
         Ok(Matcher::Version(
-            Version::parse(&input[8..])
-                .map_err(|e| format!("Could not parse version: {:}", e))
-        ?))
+            VersionMatch::Full(
+                Version::parse(&input[8..])
+                    .map_err(|e| format!("Could not parse version: {:}", e))
+        ?)))
+    } else if input.starts_with("version.") {
+        if input[8..].starts_with("major=") {
+            Ok(Matcher::Version(
+                VersionMatch::Major(u64::from_str(&input[14..])
+                        .map_err(|e| format!("Could not parse major version: {:}", e))
+            ?)))
+        } else if input[8..].starts_with("minor=") {
+            Ok(Matcher::Version(
+                VersionMatch::Minor(u64::from_str(&input[14..])
+                        .map_err(|e| format!("Could not parse minor version: {:}", e))
+            ?)))
+        } else if input[8..].starts_with("patch=") {
+            Ok(Matcher::Version(
+                VersionMatch::Patch(u64::from_str(&input[14..])
+                        .map_err(|e| format!("Could not parse patch version: {:}", e))
+            ?)))
+        } else if input[8..].starts_with("pre=") {
+            Ok(Matcher::Version(VersionMatch::Pre(input[12..].into())))
+        } else if input[8..].starts_with("build=") {
+            Ok(Matcher::Version(VersionMatch::Build(input[14..].into())))
+        } else {
+            Err(format!("Unknown version definition {:}", input))
+        }
     } else if input.starts_with("name") {
         let comparator = if input[4..].starts_with("^=") {
                 Comparator::Starts(input[6..].to_string())
@@ -272,7 +325,6 @@ mod tests {
         Ok(())
     }
 
-
     #[test]
     fn group_test() -> Result<(), String> {
         let pkg = Package {
@@ -284,6 +336,33 @@ mod tests {
         assert!(parse("name!=frame-aura")?.matches(&pkg));
         assert!(parse("name$=-aura")?.matches(&pkg));
 
+        Ok(())
+    }
+
+    #[test]
+    fn version_test() -> Result<(), String> {
+        let pkg = Package {
+            name: "pallet-aura".to_owned(),
+            version: Version::parse("1.0.0-dev.1+H1638").unwrap()
+        };
+        assert!(parse("version.pre=dev.1")?.matches(&pkg));
+        assert!(parse("version.major=1")?.matches(&pkg));
+        assert!(parse("version.minor=0")?.matches(&pkg));
+        assert!(parse("version.patch=0")?.matches(&pkg));
+        assert!(parse("version.build=H1638")?.matches(&pkg));
+        assert!(parse("(version.major=1 && version.minor=0)")?.matches(&pkg));
+        assert!(parse("(version.major=1 && version.minor=0 && version.patch=0)")?.matches(&pkg));
+        assert!(parse("version=1.0.0-dev.1+H1638")?.matches(&pkg));
+        
+        assert!(!parse("version.pre=dev.2")?.matches(&pkg));
+        assert!(!parse("version.major=0")?.matches(&pkg));
+        assert!(!parse("version.minor=1")?.matches(&pkg));
+        assert!(!parse("version.patch=1")?.matches(&pkg));
+        assert!(!parse("version.build=H2638")?.matches(&pkg));
+        assert!(!parse("(version.major=1 && version.minor=1)")?.matches(&pkg));
+        assert!(!parse("(version.major=1 && version.minor=0 && version.patch=1)")?.matches(&pkg));
+        assert!(!parse("version=1.0.0-dev.2+H2638")?.matches(&pkg));
+        
         Ok(())
     }
 }
