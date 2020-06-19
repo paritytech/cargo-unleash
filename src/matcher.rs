@@ -38,8 +38,9 @@ pub enum VersionMatch {
     Major(u64),
     Minor(u64),
     Patch(u64),
-    Pre(String),
-    Build(String),
+    Pre(Comparator),
+    Build(Comparator),
+    Not(Box<VersionMatch>),
 }
 
 impl VersionMatch {
@@ -49,14 +50,20 @@ impl VersionMatch {
             VersionMatch::Major(m) => &v.major == m,
             VersionMatch::Minor(m) => &v.minor == m,
             VersionMatch::Patch(p) => &v.patch == p,
-            VersionMatch::Pre(p) => {
-                let vis = v.pre.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(".");
-                &vis == p
-            },
-            VersionMatch::Build(b) =>  {
-                let vis = v.build.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(".");
-                &vis == b
-            }
+            VersionMatch::Pre(p) => 
+                p.matches(&v.pre
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(".")
+                ),
+            VersionMatch::Build(b) =>
+                b.matches(&v.build
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(".")),
+            VersionMatch::Not(inner) => !inner.matches(v),
         }
     }
 }
@@ -241,52 +248,96 @@ pub fn parse(input: &str) -> Result<Matcher, String> {
     translate(node)
 }
 
+fn make_comparator(input: &str) -> Result<Comparator, String> {
+    if input.starts_with("^=") {
+        Ok(Comparator::Starts(input[2..].to_string()))
+    } else if input.starts_with("$=") {
+        Ok(Comparator::Ends(input[2..].to_string()))
+    } else if input.starts_with("!=") {
+        Ok(Comparator::Neq(input[2..].to_string()))
+    } else if input.starts_with("==") {
+        Ok(Comparator::Eq(input[2..].to_string()))
+    } else if input.starts_with("=") {
+        Ok(Comparator::Eq(input[1..].to_string()))
+    } else {
+        Err(format!("Could not parse comparator {:}", input))
+    }
+}
+
+fn parse_u64(input: &str) -> Result<(bool, u64), String> {
+    parse_into(input, |v| u64::from_str(v)
+        .map_err(|e| format!("Could not parse version {:}: {:}", v, e))
+    )
+}
+
+fn parse_into<F, U>(input: &str, f: F) -> Result<(bool, U), String>
+    where F: Fn(&str) -> Result<U, String>
+{
+    if input.starts_with("!=") {
+        Ok((false, f(&input[2..])?))
+    } else if input.starts_with("==") {
+        Ok((true, f(&input[2..])?))
+    } else if input.starts_with("=") {
+        Ok((true, f(&input[1..])?))
+    } else {
+        Err(format!("could not parse matcher {:}",  input))
+    }
+}
+
+
+fn parse_maybe_not(pos: bool, inner: VersionMatch) -> VersionMatch {
+    if pos {
+        inner
+    } else {
+        VersionMatch::Not(Box::new(inner))
+    }
+}
+
 fn parse_token(inp: Vec<char>) -> Result<Matcher, String> {
-    let input: String = inp.into_iter().collect();
-    if input.starts_with("version=") {
-        Ok(Matcher::Version(
-            VersionMatch::Full(
-                Version::parse(&input[8..])
-                    .map_err(|e| format!("Could not parse version: {:}", e))
-        ?)))
-    } else if input.starts_with("version.") {
-        if input[8..].starts_with("major=") {
-            Ok(Matcher::Version(
-                VersionMatch::Major(u64::from_str(&input[14..])
-                        .map_err(|e| format!("Could not parse major version: {:}", e))
-            ?)))
-        } else if input[8..].starts_with("minor=") {
-            Ok(Matcher::Version(
-                VersionMatch::Minor(u64::from_str(&input[14..])
-                        .map_err(|e| format!("Could not parse minor version: {:}", e))
-            ?)))
-        } else if input[8..].starts_with("patch=") {
-            Ok(Matcher::Version(
-                VersionMatch::Patch(u64::from_str(&input[14..])
-                        .map_err(|e| format!("Could not parse patch version: {:}", e))
-            ?)))
-        } else if input[8..].starts_with("pre=") {
-            Ok(Matcher::Version(VersionMatch::Pre(input[12..].into())))
-        } else if input[8..].starts_with("build=") {
-            Ok(Matcher::Version(VersionMatch::Build(input[14..].into())))
+    let input: String = inp.iter().collect();
+    if input.starts_with("version") {
+        if inp[7] == '.' {
+            if input[8..].starts_with("major") {
+                parse_u64(&input[13..])
+                    .map(|(p,  v)| (p, VersionMatch::Major(v)))
+                    .map(|(a, b)| parse_maybe_not(a, b))
+                    .map(|v| Matcher::Version(v))
+            } else if input[8..].starts_with("minor") {
+                parse_u64(&input[13..])
+                    .map(|(p,  v)| (p, VersionMatch::Minor(v)))
+                    .map(|(a, b)| parse_maybe_not(a, b))
+                    .map(|v| Matcher::Version(v))
+            } else if input[8..].starts_with("patch") {
+                parse_u64(&input[13..])
+                    .map(|(p,  v)| (p, VersionMatch::Patch(v)))
+                    .map(|(a, b)| parse_maybe_not(a, b))
+                    .map(|v| Matcher::Version(v))
+            } else if input[8..].starts_with("pre") {
+                make_comparator(&input[11..])
+                    .map(|c| Matcher::Version(VersionMatch::Pre(c)))
+            } else if input[8..].starts_with("build") {
+                make_comparator(&input[13..])
+                    .map(|c| Matcher::Version(VersionMatch::Build(c)))
+            } else {
+                Err(format!("Unknown version definition {:}", input))
+            }
+
         } else {
-            Err(format!("Unknown version definition {:}", input))
+            parse_into(&input[7..], |r|
+                        Version::parse(r)
+                            .map_err(|e| format!("Can't parse version {:}: {:}", r, e))
+            ).map(|(pos, v)| {
+                if pos {
+                    VersionMatch::Full(v)
+                } else {
+                    VersionMatch::Not(Box::new(VersionMatch::Full(v)))
+                }
+            })
+            .map(|v| Matcher::Version(v))
         }
     } else if input.starts_with("name") {
-        let comparator = if input[4..].starts_with("^=") {
-                Comparator::Starts(input[6..].to_string())
-            } else if input[4..].starts_with("$=") {
-                Comparator::Ends(input[6..].to_string())
-            } else if input[4..].starts_with("!=") {
-                Comparator::Neq(input[6..].to_string())
-            } else if input[4..].starts_with("==") {
-                Comparator::Eq(input[6..].to_string())
-            } else if input[4..].starts_with("=") {
-                Comparator::Eq(input[5..].to_string())
-            } else {
-                return Err(format!("Could not parse name match {:}", input))
-            };
-        Ok(Matcher::Name(comparator))
+        make_comparator(&input[4..])
+            .map(|c| Matcher::Name(c))
     } else {
         Err(format!("Unknown Token {:}", input))
     }
@@ -349,7 +400,44 @@ mod tests {
         assert!(!parse("(version.major=1 && version.minor=1)")?.matches(&pkg));
         assert!(!parse("(version.major=1 && version.minor=0 && version.patch=1)")?.matches(&pkg));
         assert!(!parse("version=1.0.0-dev.2+H2638")?.matches(&pkg));
-        
+        Ok(())
+    }
+
+    #[test]
+    fn negated_version() -> Result<(), String> {
+        let pkg = Package {
+            name: "pallet-aura".to_owned(),
+            version: Version::parse("2.1.1-alpha.1").unwrap()
+        };
+        assert!(parse("version.pre!=dev.1")?.matches(&pkg));
+        assert!(parse("version.major!=1")?.matches(&pkg));
+        assert!(parse("version.minor!=0")?.matches(&pkg));
+        assert!(parse("version.patch!=0")?.matches(&pkg));
+        assert!(parse("version.build!=H1638")?.matches(&pkg));
+        assert!(parse("(version.major=2 && version.minor!=0)")?.matches(&pkg));
+        assert!(parse("(version.major=2 && version.minor=1 && version.patch!=0)")?.matches(&pkg));
+        assert!(parse("version!=1.0.0-dev.1+H1638")?.matches(&pkg));
+        Ok(())
+    }
+
+    #[test]
+    fn comparing_pre() -> Result<(), String> {
+        let pkg = Package {
+            name: "pallet-aura".to_owned(),
+            version: Version::parse("2.1.1-alpha.1").unwrap()
+        };
+        assert!(parse("version.pre^=alpha")?.matches(&pkg));
+        assert!(parse("version.pre$=pha.1")?.matches(&pkg));
+        Ok(())
+    }
+    #[test]
+    fn comparing_build() -> Result<(), String> {
+        let pkg = Package {
+            name: "pallet-aura".to_owned(),
+            version: Version::parse("2.1.1-alpha.1+H2918").unwrap()
+        };
+        assert!(parse("version.build^=H29")?.matches(&pkg));
+        assert!(parse("version.build$=918")?.matches(&pkg));
         Ok(())
     }
 }
