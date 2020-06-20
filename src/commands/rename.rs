@@ -26,7 +26,7 @@ fn check_for_update<'a>(
                 " package",
                 decorated(Value::from(format!("{:}", new_name)), " ", " "),
             );
-            return DependencyAction::Mutated;
+            DependencyAction::Mutated
         }
         DependencyEntry::Table(info) => {
             if !info.contains_key("path") {
@@ -35,7 +35,7 @@ fn check_for_update<'a>(
 
             info["package"] =
                 Item::Value(decorated(Value::from(format!("{:}", new_name)), " ", ""));
-            return DependencyAction::Mutated;
+            DependencyAction::Mutated
         }
     }
 }
@@ -58,7 +58,7 @@ where
                     .expect("Writing to the shell would have failed before. qed");
                 doc["package"]["name"] =
                     Item::Value(decorated(Value::from(new_name.to_string()), " ", ""));
-                (p.name().as_str().to_owned(), new_name.clone())
+                (p.name().as_str().to_owned(), new_name)
             }))
         },
     )?

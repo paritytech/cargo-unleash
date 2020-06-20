@@ -74,7 +74,7 @@ where
 {
     let mut counter = 0;
     let mut removed = Vec::new();
-    for k in vec!["dependencies", "dev-dependencies", "build-dependencies"] {
+    for k in &["dependencies", "dev-dependencies", "build-dependencies"] {
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
                 t.iter()
@@ -152,7 +152,7 @@ where
                     let mut to_remove = Vec::new();
                     for (idx, dep) in deps.iter().enumerate() {
                         if let Value::String(s) = dep {
-                            if let Some(s) = s.value().trim().split("/").next() {
+                            if let Some(s) = s.value().trim().split('/').next() {
                                 if removed.contains(&s.to_owned()) {
                                     to_remove.push(idx);
                                 }
@@ -231,8 +231,7 @@ async fn fetch_cratesio_versions(
 
     let fts = crates.into_iter().map(move |name| {
         let c = client.clone();
-        let n = name.to_string();
-        fetch(c, n.clone()).map(move |r| (n, r))
+        fetch(c, name.clone()).map(move |r| (name, r))
     });
 
     let (success, failures): (Vec<_>, Vec<_>) = futures::future::join_all(fts)
@@ -253,6 +252,6 @@ async fn fetch_cratesio_versions(
 
     Ok(success
         .into_iter()
-        .map(move |(name, r)| (name.clone(), r.expect("We partioned based on error")))
+        .map(move |(name, r)| (name, r.expect("We partioned based on error")))
         .collect::<HashMap<String, _>>())
 }

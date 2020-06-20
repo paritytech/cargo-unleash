@@ -28,7 +28,7 @@ fn check_for_update<'a>(
             if let Some(v_req) = info.get_mut("version") {
                 let r = v_req
                     .as_str()
-                    .ok_or("Version must be string".to_owned())
+                    .ok_or_else(|| "Version must be string".to_owned())
                     .and_then(|s| {
                         VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e))
                     })
@@ -59,7 +59,7 @@ fn check_for_update<'a>(
                 if let Some(v_req) = info.get("version") {
                     let r = v_req
                         .as_str()
-                        .ok_or("Version must be string".to_owned())
+                        .ok_or_else(|| "Version must be string".to_owned())
                         .and_then(|s| {
                             VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e))
                         })
@@ -106,7 +106,7 @@ where
                     .expect("Writing to the shell would have failed before. qed");
                 doc["package"]["version"] =
                     Item::Value(decorated(Value::from(nv_version.to_string()), " ", ""));
-                (p.name().as_str().to_owned(), nv_version.clone())
+                (p.name().as_str().to_owned(), nv_version)
             }))
         },
     )?
