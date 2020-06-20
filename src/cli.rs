@@ -22,19 +22,19 @@ use crate::commands;
 pub struct PackageSelectOptions {
     /// Only use the specfic set of packages
     ///
-    /// Apply only to the packages named as defined. This is mutuable exclusive with skip and ignore-version-pre.
+    /// Apply only to the packages named as defined. This is mutually exclusive with skip and ignore-version-pre.
     /// Default: []
     #[structopt(short, long, parse(from_str))]
     pub packages: Vec<InternedString>,
-    /// skip the package names matching ...
+    /// Skip the package names matching ...
     ///
     /// Provide one or many regular expression that, if the package name matches, means we skip that package.
-    /// Mutuable exclusive with `--package`
+    /// Mutually exclusive with `--package`
     #[structopt(short, long, parse(try_from_str = parse_regex))]
     pub skip: Vec<Regex>,
     /// Ignore version pre-releases
     ///
-    /// Skip if the SemVer pre-release field is any of the listed. Mutuable exclusive with `--package`
+    /// Skip if the SemVer pre-release field is any of the listed. Mutually exclusive with `--package`
     #[structopt(short = "i", long="ignore-pre-version", parse(from_str = parse_identifiers))]
     pub ignore_pre_version: Vec<Identifier>,
     /// Ignore whether `publish` is set.
