@@ -24,7 +24,7 @@ fn check_for_update<'a>(
             trace!("We renamed {:} to {:}", name, new_name);
             info.get_or_insert(
                 " package",
-                decorated(Value::from(format!("{:}", new_name)), " ", " "),
+                decorated(Value::from(new_name.to_string()), " ", " "),
             );
             DependencyAction::Mutated
         }
@@ -34,7 +34,7 @@ fn check_for_update<'a>(
             }
 
             info["package"] =
-                Item::Value(decorated(Value::from(format!("{:}", new_name)), " ", ""));
+                Item::Value(decorated(Value::from(new_name.to_string()), " ", ""));
             DependencyAction::Mutated
         }
     }
@@ -66,7 +66,7 @@ where
     .filter_map(|s| s)
     .collect::<HashMap<_, _>>();
 
-    if updates.len() == 0 {
+    if updates.is_empty() {
         c.shell().status("Done", "No changed applied")?;
         return Ok(());
     }

@@ -365,7 +365,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         fs::canonicalize(path)?
     };
 
-    let maybe_patch = |shouldnt_patch, predicate: &Box<dyn Fn(&Package) -> bool>| {
+    let maybe_patch = |shouldnt_patch, predicate: &dyn Fn(&Package) -> bool| {
         if shouldnt_patch {
             return Ok(());
         }
@@ -415,9 +415,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             }
             let predicate = make_pkg_predicate(pkg_opts)?;
             let type_value = {
-                if &value == "true" {
-                    Value::from(true)
-                } else if &value == "false" {
+                if &value == "true" || &value == "false" {
                     Value::from(true)
                 } else if let Ok(v) = i64::from_str(&value) {
                     Value::from(v)

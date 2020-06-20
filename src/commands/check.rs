@@ -79,7 +79,7 @@ fn run_check(
     // package has a workspace we can still build our new crate.
     let (src, new_pkg) = {
         let id = SourceId::for_path(&dst)?;
-        let mut src = PathSource::new(&dst, id.clone(), ws.config());
+        let mut src = PathSource::new(&dst, id, ws.config());
         let new_pkg = src.root_package()?;
 
         // inject our local builds
@@ -146,14 +146,14 @@ fn run_check(
     Ok(())
 }
 
-fn check_dependencies<'a>(package: &'a Package) -> Result<(), String> {
+fn check_dependencies(package: &Package) -> Result<(), String> {
     let git_deps = package
         .dependencies()
         .iter()
         .filter(|d| d.source_id().is_git() && d.version_req() == &VersionReq::any())
         .map(|d| format!("{:}", d.package_name()))
         .collect::<Vec<_>>();
-    if git_deps.len() > 0 {
+    if !git_deps.is_empty() {
         Err(git_deps.join(", "))
     } else {
         Ok(())
@@ -162,36 +162,36 @@ fn check_dependencies<'a>(package: &'a Package) -> Result<(), String> {
 
 // ensure metadata is set
 // https://doc.rust-lang.org/cargo/reference/publishing.html#before-publishing-a-new-crate
-fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
+fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
     let mut bad_fields = Vec::new();
-    if metadata.authors.len() == 0 {
+    if metadata.authors.is_empty() {
         bad_fields.push("authors is empty")
     }
     match metadata.description {
-        Some(ref s) if s.len() == 0 => bad_fields.push("description is empty"),
+        Some(ref s) if s.is_empty() => bad_fields.push("description is empty"),
         None => bad_fields.push("description is missing"),
         _ => {}
     }
     match metadata.repository {
-        Some(ref s) if s.len() == 0 => bad_fields.push("repository is empty"),
+        Some(ref s) if s.is_empty() => bad_fields.push("repository is empty"),
         None => bad_fields.push("repository is missing"),
         _ => {}
     }
     match (metadata.license.as_ref(), metadata.license_file.as_ref()) {
-        (Some(ref s), None) | (None, Some(ref s)) if s.len() > 0 => {}
+        (Some(ref s), None) | (None, Some(ref s)) if !s.is_empty() => {}
         (Some(_), Some(_)) => bad_fields.push("You can't have license AND license_file"),
         _ => bad_fields.push("Neither license nor license_file is provided"),
     }
 
-    if bad_fields.len() == 0 {
+    if bad_fields.is_empty() {
         Ok(())
     } else {
         Err(bad_fields.join("; "))
     }
 }
 
-pub fn check<'a, 'r>(
-    packages: &Vec<Package>,
+pub fn check<'a>(
+    packages: &[Package],
     ws: &Workspace<'a>,
     build: bool,
 ) -> Result<(), Box<dyn Error>> {
@@ -236,12 +236,13 @@ pub fn check<'a, 'r>(
         res
     });
 
-    let errors_count = errors
-        .iter()
-        .map(|s| error!("{:#?}", s))
-        .count();
+    for s in &errors {
+        error!("{:#?}", s);
+    }
 
-    if errors.len() > 0 {
+    let errors_count = errors.len();
+
+    if !errors.is_empty() {
         return Err(format!("Soft checkes failed with {} errors (see above)", errors_count).into());
     }
 
@@ -256,18 +257,19 @@ pub fn check<'a, 'r>(
             .map_err(|e| format!("{:}", e))?;
         match package(&pkg_ws, &opts) {
             Ok(Some(rw_lock)) => Ok((pkg_ws, rw_lock)),
-            Ok(None) => Err(format!("Failure packing {:}", pkg.name()).into()),
-            Err(e) => Err(format!("Failure packing {:}: {}", pkg.name(), e).into()),
+            Ok(None) => Err(format!("Failure packing {:}", pkg.name())),
+            Err(e) => Err(format!("Failure packing {:}: {}", pkg.name(), e)),
         }
     });
 
     let (errors, successes): (Vec<_>, Vec<_>) =
         builds.partition(|r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
 
-    let errors_count = errors
-        .iter()
-        .map(|r| r.as_ref().map_err(|e| error!("{:#?}", e)))
-        .count();
+    for r in &errors {
+        let _ = r.as_ref().map_err(|e| error!("{:#?}", e));
+    }
+
+    let errors_count = errors.len();
 
     if errors_count > 0 {
         return Err(format!("Packing failed with {} errors (see above)", errors_count).into());

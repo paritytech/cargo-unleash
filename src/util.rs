@@ -14,7 +14,7 @@ pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
     for m in ws.members() {
         total_list.push(m.clone());
         for dep in m.dependencies() {
-            let source = dep.source_id().clone();
+            let source = dep.source_id();
             if source.is_path() {
                 let dst = source
                     .url()
@@ -68,7 +68,7 @@ pub enum DependencyAction {
 /// Iterate through the dependency sections of root, find each
 /// dependency entry, that is a subsection and hand it and its name
 /// to f. Return the counter of how many times f returned true.
-pub fn edit_each_dep<'a, F>(root: &'a mut Table, f: F) -> u32
+pub fn edit_each_dep<F>(root: &mut Table, f: F) -> u32
 where
     F: Fn(String, Option<String>, DependencyEntry) -> DependencyAction,
 {
@@ -96,7 +96,7 @@ where
             let (name, action) = match t.entry(&key) {
                 Item::Value(Value::InlineTable(info)) => {
                     let (name, alias) = {
-                        if let Some(name) = info.get("package").clone() {
+                        if let Some(name) = info.get("package") {
                             // is there a rename
                             (name
                                 .as_str()
@@ -111,7 +111,7 @@ where
                 }
                 Item::Table(info) => {
                     let (name, alias) = {
-                        if let Some(name) = info.get("package").clone() {
+                        if let Some(name) = info.get("package") {
                             // is there a rename
                             (name
                                 .as_str()
@@ -239,7 +239,7 @@ async fn fetch_cratesio_versions(
         .into_iter()
         .partition(|(_, r)| r.is_ok());
 
-    if failures.len() > 0 {
+    if !failures.is_empty() {
         return Err(format!(
             "Failure fetching crates versions: {:}",
             failures
