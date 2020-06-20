@@ -299,7 +299,7 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
         ignore_publish,
     } = args;
 
-    if !packages.is_empty()&& (!skip.is_empty() || !ignore_pre_version.is_empty()) {
+    if !packages.is_empty() && (!skip.is_empty() || !ignore_pre_version.is_empty()) {
         return Err(
             "-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
                 .into(),

@@ -10,9 +10,9 @@ use cargo::{
     sources::PathSource,
     util::{paths, FileLock},
 };
-use semver::VersionReq;
 use flate2::read::GzDecoder;
 use log::error;
+use semver::VersionReq;
 use std::{
     collections::HashMap,
     error::Error,
@@ -231,7 +231,11 @@ pub fn check<'a>(
             res.push(format!("{:}: Bad metadata: {:}", pkg.name(), e));
         }
         if let Err(e) = check_dependencies(pkg) {
-            res.push(format!("{:}: has dependencies defined as git without a version: {:}", pkg.name(), e));
+            res.push(format!(
+                "{:}: has dependencies defined as git without a version: {:}",
+                pkg.name(),
+                e
+            ));
         }
         res
     });
@@ -243,7 +247,11 @@ pub fn check<'a>(
     let errors_count = errors.len();
 
     if !errors.is_empty() {
-        return Err(format!("Soft checkes failed with {} errors (see above)", errors_count).into());
+        return Err(format!(
+            "Soft checkes failed with {} errors (see above)",
+            errors_count
+        )
+        .into());
     }
 
     let builds = packages.iter().map(|pkg| {

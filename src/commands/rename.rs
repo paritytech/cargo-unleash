@@ -33,8 +33,7 @@ fn check_for_update<'a>(
                 return DependencyAction::Untouched; // entry isn't local
             }
 
-            info["package"] =
-                Item::Value(decorated(Value::from(new_name.to_string()), " ", ""));
+            info["package"] = Item::Value(decorated(Value::from(new_name.to_string()), " ", ""));
             DependencyAction::Mutated
         }
     }
