@@ -15,7 +15,7 @@ Try and have it report what it would do on your mono repo with
 
 ```bash
 
-cargo unleash em-dragons --dry=run
+cargo unleash em-dragons --dry-run
 ```
 
 There are more options available on the CLI, just run with `--help`:
@@ -110,17 +110,17 @@ OPTIONS:
     -i, --ignore-pre-version <ignore-pre-version>...    
             Ignore version pre-releases
             
-            Skip if the SemVer pre-release field is any of the listed. Mutuable exclusive with `--package`
+            Skip if the SemVer pre-release field is any of the listed. Mutually exclusive with `--package`
     -p, --packages <packages>...                        
             Only use the specfic set of packages
             
-            Apply only to the packages named as defined. This is mutuable exclusive with skip and ignore-version-pre.
+            Apply only to the packages named as defined. This is mutually exclusive with skip and ignore-version-pre.
             Default: []
     -s, --skip <skip>...                                
             skip the package names matching ...
             
             Provide one or many regular expression that, if the package name matches, means we skip that package.
-            Mutuable exclusive with `--package`
+            Mutually exclusive with `--package`
         --token <token>                                 
              [env: CRATES_TOKEN]
 
