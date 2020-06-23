@@ -2,6 +2,7 @@ mod add_owner;
 mod check;
 mod clean_deps;
 mod de_dev_deps;
+mod hidden_features;
 mod release;
 mod rename;
 mod set_field;

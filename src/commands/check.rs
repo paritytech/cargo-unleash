@@ -1,3 +1,5 @@
+use crate::cli::HiddenFeaturesOpt;
+use crate::commands::hidden_features::*;
 use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::{
     core::{
@@ -14,9 +16,10 @@ use flate2::read::GzDecoder;
 use log::error;
 use semver::VersionReq;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     error::Error,
     fs::{read_to_string, write},
+    path::PathBuf,
     sync::Arc,
 };
 use tar::Archive;
@@ -190,10 +193,54 @@ fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
     }
 }
 
+fn check_for_hidden_features(
+    hidden_features_opt: HiddenFeaturesOpt,
+    ws: &Workspace,
+) -> Result<(), Box<dyn Error>> {
+    let c = ws.config();
+    let ws_root = ws.root();
+
+    c.shell().status("Checking", "Hidden features")?;
+    // Get the list of ignored paths from the cli options.
+    let mut ignored_paths: HashSet<PathBuf> = hidden_features_opt
+        .ignored_paths
+        .into_iter()
+        .map(|p| ws_root.join(p))
+        .collect();
+
+    // Adding 'target' folder to `ignored_paths`.
+    ignored_paths.insert(ws_root.join("target"));
+
+    // Get the list of ignored features from the cli options.
+    let ignored_features = hidden_features_opt
+        .ignored_features
+        .iter()
+        .cloned()
+        .collect();
+
+    let mut hidden_features_finder =
+        HiddenFeaturesFinder::new(ignored_paths, ignored_features, Some(c));
+    hidden_features_finder.find_used_features(&ws.root())?;
+    hidden_features_finder.find_exposed_features();
+    hidden_features_finder.find_hidden_features();
+    match hidden_features_finder.check_hidden_features() {
+        Ok(_) => {}
+        Err(e) => {
+            if hidden_features_opt.deny_warnings {
+                return Err(e.into());
+            } else {
+                c.shell().warn(e)?
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn check<'a>(
     packages: &[Package],
     ws: &Workspace<'a>,
     build: bool,
+    hidden_features_opt: HiddenFeaturesOpt,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let replaces = packages
@@ -224,6 +271,7 @@ pub fn check<'a>(
         features: Vec::new(),
     };
 
+    check_for_hidden_features(hidden_features_opt, &ws)?;
     c.shell().status("Checking", "Metadata & Dependencies")?;
 
     let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {

@@ -46,6 +46,21 @@ pub struct PackageSelectOptions {
     ignore_publish: bool,
 }
 
+/// Options used for finding hidden features.
+#[derive(StructOpt, Debug)]
+pub struct HiddenFeaturesOpt {
+    /// Error instead of warn if any feature is missing.
+    #[structopt(long = "deny-warnings")]
+    pub deny_warnings: bool,
+
+    /// List of paths to ignore when checking for hidden features.
+    #[structopt(long = "ignored-paths")]
+    pub ignored_paths: Vec<String>,
+    /// List of features to ignore when checking for hidden features.
+    #[structopt(long = "ignored-features")]
+    pub ignored_features: Vec<String>,
+}
+
 #[derive(StructOpt, Debug)]
 pub enum VersionCommand {
     /// Pick pre-releases and put them to release mode.
@@ -235,6 +250,9 @@ pub enum Command {
         /// build. Set this flag to have it run an actual `build` instead.
         #[structopt(long = "build")]
         build: bool,
+
+        #[structopt(flatten)]
+        hidden_features_opt: HiddenFeaturesOpt,
     },
     /// Unleash 'em dragons
     ///
@@ -265,6 +283,9 @@ pub enum Command {
         // the token to use for uploading
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>,
+
+        #[structopt(flatten)]
+        hidden_features_opt: HiddenFeaturesOpt,
     },
 }
 
@@ -618,6 +639,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             include_dev,
             build,
             pkg_opts,
+            hidden_features_opt,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -626,7 +648,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::check(&packages, &ws, build)
+            commands::check(&packages, &ws, build, hidden_features_opt)
         }
         Command::EmDragons {
             dry_run,
@@ -636,6 +658,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             add_owner,
             build,
             pkg_opts,
+            hidden_features_opt,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -646,7 +669,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let packages = commands::packages_to_release(&ws, predicate)?;
 
             if !no_check {
-                commands::check(&packages, &ws, build)?;
+                commands::check(&packages, &ws, build, hidden_features_opt)?;
             }
 
             ws.config().shell().status(
