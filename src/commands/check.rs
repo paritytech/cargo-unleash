@@ -200,7 +200,6 @@ fn check_for_hidden_features(
     let c = ws.config();
     let ws_root = ws.root();
 
-    c.shell().status("Checking", "Hidden features")?;
     // Get the list of ignored paths from the cli options.
     let mut ignored_paths: HashSet<PathBuf> = hidden_features_opt
         .ignored_paths
@@ -223,7 +222,7 @@ fn check_for_hidden_features(
     hidden_features_finder.find_used_features(&ws.root())?;
     hidden_features_finder.find_exposed_features();
     hidden_features_finder.find_hidden_features();
-    match hidden_features_finder.check_hidden_features() {
+    match hidden_features_finder.display_hidden_features() {
         Ok(_) => {}
         Err(e) => {
             if hidden_features_opt.deny_warnings {
@@ -271,7 +270,9 @@ pub fn check<'a>(
         features: Vec::new(),
     };
 
+    c.shell().status("Checking", "Hidden features")?;
     check_for_hidden_features(hidden_features_opt, &ws)?;
+
     c.shell().status("Checking", "Metadata & Dependencies")?;
 
     let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {

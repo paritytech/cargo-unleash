@@ -301,34 +301,41 @@ impl<'a> HiddenFeaturesFinder<'a> {
         }
     }
 
-    // todo pretty print
-    pub fn check_hidden_features(&self) -> Result<(), String> {
-        let mut empty = true;
+    /// Utily function to display the msg to the user. Warns if a shell is linked, else uses println!.
+    fn display(&self, msg: &str) -> Result<(), String> {
+        match self.config {
+            Some(c) => {
+                c.shell().warn(msg).map_err(|e| e.to_string())?;
+            }
+            None => println!("{}", msg),
+        }
+        Ok(())
+    }
+
+    /// Display hidden features and errors if some were found.
+    pub fn display_hidden_features(&self) -> Result<(), String> {
+        let mut hidden_features_found = false;
         for cargo in self.mapping.values() {
+            if !cargo.hidden_features.is_empty() {
+                hidden_features_found = true;
+                let msg = format!("Cargo root: {}", cargo.path.display());
+                self.display(&msg)?
+            }
             for feature in &cargo.hidden_features {
-                empty = false;
                 let msg = format!(
-                    "{}\t{}",
+                    "\t{}\t{}",
                     feature.name(),
                     feature
                         .clickable_path()
                         .unwrap_or_else(|| String::from(feature.name()))
                 );
-                match self.config {
-                    Some(c) => {
-                        c.shell().warn(msg).map_err(|e| e.to_string())?;
-                    }
-                    None => println!("{}", msg),
-                }
+                self.display(&msg)?;
             }
         }
-        if empty {
-            Ok(())
+        if hidden_features_found {
+            Err("Hidden features detected. Hint: you can ignore specific features with `--ignored-features` and/or specific paths with `--ignored-paths`".to_string())
         } else {
-            Err("Hidden features detected\n
-				Hint: you can ignore specific features with `--ignored-features`
-				and/or specific paths with `--ignored-paths`"
-                .to_string())
+            Ok(())
         }
     }
 
@@ -350,7 +357,7 @@ impl<'a> HiddenFeaturesFinder<'a> {
         self.find_used_features(path)?;
         self.find_exposed_features();
         self.find_hidden_features();
-        self.check_hidden_features()
+        self.display_hidden_features()
     }
 }
 
@@ -368,7 +375,7 @@ mod tests {
         let excluded_paths = HashSet::new();
         let excluded_features = HashSet::new();
         let p = HiddenFeaturesFinder::new(excluded_paths, excluded_features, None);
-        let res = p.check_hidden_features();
+        let res = p.display_hidden_features();
         dbg!(&res);
         assert!(res.is_ok());
     }
