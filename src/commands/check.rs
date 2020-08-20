@@ -1,3 +1,6 @@
+#[cfg(feature = "gen-readme")]
+use crate::commands::readme;
+
 use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::{
     core::{
@@ -10,9 +13,9 @@ use cargo::{
     sources::PathSource,
     util::{paths, FileLock},
 };
-use semver::VersionReq;
 use flate2::read::GzDecoder;
 use log::error;
+use semver::VersionReq;
 use std::{
     collections::HashMap,
     error::Error,
@@ -190,10 +193,22 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "gen-readme")]
+fn check_readme<'a>(ws: &Workspace<'a>, pkg: &Package) -> Result<(), String> {
+    let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
+    readme::check_pkg_readme(ws, pkg_path, pkg.manifest())
+}
+
+#[cfg(not(feature = "gen-readme"))]
+fn check_readme<'a>(_ws: &Workspace<'a>, _pkg: &Package) -> Result<(), String> {
+    unreachable!()
+}
+
 pub fn check<'a, 'r>(
     packages: &Vec<Package>,
     ws: &Workspace<'a>,
     build: bool,
+    check_readme: bool,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
     let replaces = packages
@@ -231,18 +246,47 @@ pub fn check<'a, 'r>(
             res.push(format!("{:}: Bad metadata: {:}", pkg.name(), e));
         }
         if let Err(e) = check_dependencies(pkg) {
-            res.push(format!("{:}: has dependencies defined as git without a version: {:}", pkg.name(), e));
+            res.push(format!(
+                "{:}: has dependencies defined as git without a version: {:}",
+                pkg.name(),
+                e
+            ));
         }
         res
     });
 
-    let errors_count = errors
-        .iter()
-        .map(|s| error!("{:#?}", s))
-        .count();
+    let errors_count = errors.iter().map(|s| error!("{:#?}", s)).count();
 
     if errors.len() > 0 {
-        return Err(format!("Soft checkes failed with {} errors (see above)", errors_count).into());
+        return Err(format!(
+            "Soft checkes failed with {} errors (see above)",
+            errors_count
+        )
+        .into());
+    }
+
+    if check_readme {
+        c.shell().status("Checking", "Readme files")?;
+        let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
+            if let Err(e) = self::check_readme(&ws, &pkg) {
+                res.push(format!(
+                    "{:}: Checking Readme file failed with: {:}",
+                    pkg.name(),
+                    e
+                ));
+            }
+            res
+        });
+
+        let errors_count = errors.iter().map(|s| error!("{:#?}", s)).count();
+
+        if errors.len() > 0 {
+            return Err(format!(
+                "{} readme file(s) need to be updated (see above).",
+                errors_count
+            )
+            .into());
+        }
     }
 
     let builds = packages.iter().map(|pkg| {

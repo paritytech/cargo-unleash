@@ -17,3 +17,9 @@ pub use rename::rename;
 pub use set_field::set_field;
 pub use to_release::packages_to_release;
 pub use version::set_version;
+
+#[cfg(feature = "gen-readme")]
+mod readme;
+
+#[cfg(feature = "gen-readme")]
+pub use readme::gen_all_readme;
