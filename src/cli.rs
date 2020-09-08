@@ -1,6 +1,9 @@
 use cargo::{
-    core::{package::Package, InternedString, Verbosity, Workspace},
-    util::config::Config as CargoConfig,
+    core::{package::Package, Verbosity, Workspace},
+    util::{
+        config::Config as CargoConfig,
+        interning::InternedString,
+    },
 };
 use flexi_logger::Logger;
 use log::trace;

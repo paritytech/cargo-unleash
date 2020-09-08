@@ -24,7 +24,7 @@ pub fn release<'a>(
         no_default_features: false,
         index: None,
         jobs: None,
-        target: None,
+        targets: Vec::new(),
         registry: None,
         features: Vec::new(),
     };

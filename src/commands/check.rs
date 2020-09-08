@@ -114,8 +114,7 @@ fn run_check(
     ops::compile_with_exec(
         &ws,
         &ops::CompileOptions {
-            config,
-            build_config: BuildConfig::new(config, opts.jobs, &opts.target, build_mode)?,
+            build_config: BuildConfig::new(config, opts.jobs, &opts.targets, build_mode)?,
             features: opts.features.clone(),
             no_default_features: opts.no_default_features,
             all_features: opts.all_features,
@@ -127,7 +126,6 @@ fn run_check(
             target_rustc_args: rustc_args,
             local_rustdoc_args: None,
             rustdoc_document_private_items: false,
-            export_dir: None,
         },
         &exec,
     )?;
@@ -235,7 +233,7 @@ pub fn check<'a, 'r>(
         all_features: false,
         no_default_features: false,
         jobs: None,
-        target: None,
+        targets: Vec::new(),
         features: Vec::new(),
     };
 
