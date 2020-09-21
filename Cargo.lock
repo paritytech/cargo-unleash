@@ -182,6 +182,7 @@ dependencies = [
  "cargo-readme",
  "flate2",
  "flexi_logger",
+ "git2",
  "lazy_static",
  "log",
  "petgraph",

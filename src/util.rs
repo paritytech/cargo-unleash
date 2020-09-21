@@ -3,9 +3,55 @@ use cargo::{
     sources::PathSource,
 };
 use log::warn;
-use std::{error::Error, fs};
+use std::{
+    collections::{HashSet, HashMap},
+    error::Error, fs,
+};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
+use petgraph::Graph;
+use git2::{Repository};
 
+pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> HashSet<Package> {
+    let path = ws.root();
+    println!("{:?}", path);
+    let repo = Repository::open(&path).expect("Workspace isn't a git repo");
+    let current_head = repo.head()
+        .and_then(|b| b.peel_to_commit())
+        .and_then(|c| c.tree())
+        .expect("Could not determine current git HEAD");
+    let main = repo
+        .find_reference(reference)
+        .and_then(|d| d.peel_to_commit())
+        .and_then(|c| c.tree())
+        .expect(&format!("Reference {:?} not found in git repository", reference));
+
+    let diff = repo
+        .diff_tree_to_tree(Some(&current_head), Some(&main), None)
+        .expect("Diffing failed");
+
+    let files = diff
+        .deltas()
+        .filter_map(|d| d.new_file().path().clone())
+        .filter_map(|d| if d.is_file() { d.parent() } else { Some(d) })
+        .map(|l| path.join(l))
+        .collect::<Vec<_>>();
+
+    let mut packages = HashSet::new();
+
+    for m in members_deep(ws) {
+        let root = m.root();
+        for f in files.iter() {
+            if f.starts_with(root) {
+                packages.insert(m);
+                break;
+            }
+        }
+    }
+
+    packages
+}
+
+// Find all members of the workspace, into the total depth
 pub fn members_deep(ws: &'_ Workspace) -> Vec<Package> {
     let mut total_list = Vec::new();
     for m in ws.members() {
