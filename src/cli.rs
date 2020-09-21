@@ -61,6 +61,14 @@ pub struct PackageSelectOptions {
     /// regardless, set this flag.
     #[structopt(long = "ignore-publish")]
     ignore_publish: bool,
+    /// Automatically detect the packages, which changed compared to the given git commit.
+    ///
+    /// Compares the current git `head` to the reference given, identifies which files changed
+    /// and attempts to identify the packages and its dependents through that mechanism. You
+    /// can use any `tag`, `branch` or `commit`, but you must be sure it is available
+    /// (and up to date) locally.
+    #[structopt(short = "c", long="changed-since")]
+    pub changed_since: String,
 }
 
 #[derive(StructOpt, Debug)]
@@ -348,6 +356,7 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
         skip,
         ignore_pre_version,
         ignore_publish,
+        changed_since,
     } = args;
 
     if !packages.is_empty() {
@@ -357,7 +366,23 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
                     .into(),
             );
         }
+        if changed_since.len() != 0 {
+            return Err(
+                "-p/--packages is mutually exlusive to using -c/--changed-since"
+                    .into(),
+            );
+        }
     }
+
+    if changed_since.len() != 0 {
+        if !skip.is_empty() || !ignore_pre_version.is_empty() {
+            return Err(
+                "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
+                    .into(),
+            );
+        }
+    }
+
 
     let publish = move |p: &Package| {
         let publ = if ignore_publish {
@@ -370,6 +395,8 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
         trace!("{:}.publish={}", p.name(), publ);
         publ
     };
+
+
 
     if !packages.is_empty() {
         trace!("going for matching against {:?}", packages);

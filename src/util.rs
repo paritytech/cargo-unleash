@@ -8,7 +8,48 @@ use serde::Deserialize;
 use std::{collections::HashMap, error::Error, fs, time::Duration};
 use tokio::runtime::Runtime;
 use toml_edit::{Document, InlineTable, Item, Table, Value};
+use petgraph::Graph;
+use git2::{Repository};
 
+pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Vec<Package> {
+    let path = ws.root();
+    let repo = Repository::open(&path).expect("Workspace isn't a git repo");
+    let current_head = repo.head()
+        .and_then(|b| b.peel_to_commit())
+        .and_then(|c| c.tree())
+        .expect("Could not determine current git HEAD");
+    let main = repo
+        .find_reference(reference)
+        .and_then(|d| d.peel_to_commit())
+        .and_then(|c| c.tree())
+        .expect(format!("Reference {:?} not found in git repository", reference));
+
+    let diff = repo
+        .diff_tree_to_tree(Some(&current_head), Some(&main), None)
+        .expect("Diffing failed");
+
+    let files = diff
+        .deltas()
+        .filter_map(|d| d.new_file().path().clone())
+        .filter_map(|d| if d.is_file() { d.parent() } else { Some(d) })
+        .map(|l| path.join(l))
+        .collect::<Vec<_>>();
+
+    let cfg = git2::Config::default().unwrap();
+
+    for m in members_deep(ws) {
+        let root = m.root();
+        for f in files.iter() {
+            if f.starts_with(root) {
+                println!("{:?}: {:}", f, m.name());
+                break;
+            }
+        }
+    }
+
+}
+
+// Find all members of the workspace, into the total depth
 pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
     let mut total_list = Vec::new();
     for m in ws.members() {
