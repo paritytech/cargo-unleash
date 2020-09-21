@@ -201,6 +201,7 @@ dependencies = [
  "flate2",
  "flexi_logger",
  "futures",
+ "lazy_static",
  "log",
  "petgraph",
  "regex",
