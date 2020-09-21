@@ -65,8 +65,8 @@ where
     drop(lock);
 
     let map = members
-        .into_iter()
-        .filter_map(|member| {
+        .iter()
+        .filter_map(|&member| {
             if ignored.contains(&member.name()) || already_published.contains(&member.name()) {
                 return None;
             }
@@ -74,7 +74,7 @@ where
         })
         .collect::<HashMap<_, _>>();
 
-    for member in members_deep(ws).iter() {
+    for member in members {
         let current_index = match map.get(&member.name()) {
             Some(i) => i,
             _ => continue, // ignore entries we are not expected to publish
