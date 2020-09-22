@@ -1,5 +1,7 @@
 use crate::cli::GenerateReadmeMode;
 use cargo::core::{Manifest, Package, Workspace};
+use lazy_static::lazy_static;
+use regex::{Captures, Regex};
 use sha1::Sha1;
 use std::{
     error::Error,
@@ -7,6 +9,14 @@ use std::{
     fs::{self, File},
     path::{Path, PathBuf},
 };
+
+static DEFAULT_DOC_URI: &str = "https://docs.rs/";
+
+lazy_static! {
+    // See http://blog.michaelperrin.fr/2019/02/04/advanced-regular-expressions/
+    static ref RELATIVE_LINKS_REGEX: Regex = 
+        Regex::new(r#"\[(?P<text>.+)\]\((?P<url>[^ ]+)(?: "(?P<title>.+)")?\)"#).unwrap();
+}
 
 #[derive(Debug)]
 pub enum CheckReadmeResult {
@@ -88,6 +98,9 @@ pub fn gen_pkg_readme<'a>(
     let c = ws.config();
     let root_path = ws.root();
 
+    let pkg_name = pkg_manifest.name();
+    let doc_uri = pkg_manifest.metadata().documentation.as_ref();
+
     let mut pkg_source = find_entrypoint(pkg_path)?;
     let readme_path = pkg_path.join("README.md");
 
@@ -95,10 +108,7 @@ pub fn gen_pkg_readme<'a>(
     match (mode, pkg_readme) {
         (GenerateReadmeMode::IfMissing, Ok(_existing_readme)) => {
             c.shell()
-                .status(
-                    "Skipping",
-                    format!("{}: Readme already exists.", &pkg_manifest.name()),
-                )
+                .status("Skipping", format!("{}: Readme already exists.", &pkg_name))
                 .map_err(|e| format!("{:}", e))?;
 
             Ok(())
@@ -110,7 +120,7 @@ pub fn gen_pkg_readme<'a>(
                     "Generating",
                     format!(
                         "Readme for {} (template: {:?})",
-                        &pkg_manifest.name(),
+                        &pkg_name,
                         match &template_path {
                             Some(p) => p.strip_prefix(&root_path).unwrap_or(p).to_str().unwrap(),
                             None => "none found",
@@ -122,7 +132,8 @@ pub fn gen_pkg_readme<'a>(
             if mode == &GenerateReadmeMode::Append && existing_res.is_ok() {
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
-            fs::write(readme_path, new_readme.as_bytes()).map_err(|e| format!("{:}", e))
+            let final_readme = &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
+            fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e))
         }
     }
 }
@@ -202,4 +213,26 @@ fn find_readme_template<'a>(
     } else {
         None
     })
+}
+
+fn fix_doc_links(pkg_name: &str, readme: &str, doc_uri: Option<&str>) -> String {
+    RELATIVE_LINKS_REGEX
+        .replace_all(&readme, |caps: &Captures| match caps.name("url") {
+            Some(url) if url.as_str().starts_with("../") => format!(
+                "[{}]({}{})",
+                &caps.name("text").unwrap().as_str(),
+                doc_uri.unwrap_or(DEFAULT_DOC_URI),
+                &url.as_str().replace('_', "-").replace("/index.html", "")[3..]
+            ),
+            Some(url) if url.as_str().starts_with("./") => format!(
+                "[{}]({}{}/latest/{}/{})",
+                &caps.name("text").unwrap().as_str(),
+                doc_uri.unwrap_or(DEFAULT_DOC_URI),
+                pkg_name,
+                pkg_name.replace('-', "_"),
+                &url.as_str()[2..]
+            ),
+            _ => caps[0].to_string(),
+        })
+        .into()
 }
