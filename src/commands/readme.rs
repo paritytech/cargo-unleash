@@ -1,4 +1,5 @@
 use crate::cli::GenerateReadmeMode;
+use crate::commands;
 use cargo::core::{Manifest, Package, Workspace};
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
@@ -9,6 +10,7 @@ use std::{
     fs::{self, File},
     path::{Path, PathBuf},
 };
+use toml_edit::Value;
 
 static DEFAULT_DOC_URI: &str = "https://docs.rs/";
 
@@ -73,17 +75,16 @@ pub fn check_pkg_readme<'a>(
 }
 
 pub fn gen_all_readme<'a>(
-    packages: &Vec<Package>,
+    packages: Vec<Package>,
     ws: &Workspace<'a>,
     readme_mode: GenerateReadmeMode,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
-
     c.shell().status("Generating", "Readme files")?;
-    for pkg in packages.iter() {
-        let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
-        gen_pkg_readme(ws, &pkg_path, &pkg.manifest(), &readme_mode)
-            .map_err(|e| format!("Failure generating Readme for {:}: {}", pkg.name(), e))?
+    for pkg in packages.into_iter() {
+        let pkg_name = &pkg.name().clone();
+        gen_pkg_readme(ws, pkg, &readme_mode)
+            .map_err(|e| format!("Failure generating Readme for {:}: {}", pkg_name, e))?
     }
 
     Ok(())
@@ -91,13 +92,15 @@ pub fn gen_all_readme<'a>(
 
 pub fn gen_pkg_readme<'a>(
     ws: &Workspace<'a>,
-    pkg_path: &Path,
-    pkg_manifest: &Manifest,
+    pkg: Package,
     mode: &GenerateReadmeMode,
 ) -> Result<(), String> {
     let c = ws.config();
     let root_path = ws.root();
 
+    let pkg_manifest = pkg.manifest();
+    let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
+    
     let pkg_name = pkg_manifest.name();
     let doc_uri = pkg_manifest.metadata().documentation.as_ref();
 
@@ -110,7 +113,7 @@ pub fn gen_pkg_readme<'a>(
             c.shell()
                 .status("Skipping", format!("{}: Readme already exists.", &pkg_name))
                 .map_err(|e| format!("{:}", e))?;
-
+            set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
             Ok(())
         }
         (mode, existing_res) => {
@@ -133,7 +136,9 @@ pub fn gen_pkg_readme<'a>(
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
             let final_readme = &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
-            fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e))
+            let res = fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
+            set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
+            res
         }
     }
 }
@@ -154,6 +159,15 @@ fn generate_readme<'a>(
         false,
         true,
         false,
+    )
+}
+
+fn set_readme_field(pkg: Package) -> Result<(), Box<dyn Error>> {
+    commands::set_field(
+        vec![pkg].iter(),
+        "package".to_owned(),
+        "readme".to_owned(),
+        Value::from("README.md"),
     )
 }
 

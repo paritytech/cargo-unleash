@@ -705,7 +705,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::gen_all_readme(&packages, &ws, readme_mode)
+            commands::gen_all_readme(packages, &ws, readme_mode)
         }
         Command::EmDragons {
             dry_run,
