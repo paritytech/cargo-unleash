@@ -135,8 +135,10 @@ pub fn gen_pkg_readme<'a>(
             if mode == &GenerateReadmeMode::Append && existing_res.is_ok() {
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
-            let final_readme = &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
-            let res = fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
+            let final_readme =
+                &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
+            let res =
+                fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
             set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
             res
         }
@@ -232,12 +234,18 @@ fn find_readme_template<'a>(
 fn fix_doc_links(pkg_name: &str, readme: &str, doc_uri: Option<&str>) -> String {
     RELATIVE_LINKS_REGEX
         .replace_all(&readme, |caps: &Captures| match caps.name("url") {
-            Some(url) if url.as_str().starts_with("../") => format!(
-                "[{}]({}{})",
-                &caps.name("text").unwrap().as_str(),
-                doc_uri.unwrap_or(DEFAULT_DOC_URI),
-                &url.as_str().replace('_', "-").replace("/index.html", "")[3..]
-            ),
+            Some(url) if url.as_str().starts_with("../") => {
+                let parent_end = url.as_str()[3..].find('/').unwrap() + 3;
+                let parent = &url.as_str()[3..parent_end];
+                format!(
+                    "[{}]({}{}/latest/{}/{})",
+                    &caps.name("text").unwrap().as_str(),
+                    doc_uri.unwrap_or(DEFAULT_DOC_URI),
+                    parent.replace('_', "-"),
+                    parent,
+                    &url.as_str()[parent_end + 1..].replace("index.html", "")
+                )
+            }
             Some(url) if url.as_str().starts_with("./") => format!(
                 "[{}]({}{}/latest/{}/{})",
                 &caps.name("text").unwrap().as_str(),
