@@ -16,7 +16,7 @@ static DEFAULT_DOC_URI: &str = "https://docs.rs/";
 
 lazy_static! {
     // See http://blog.michaelperrin.fr/2019/02/04/advanced-regular-expressions/
-    static ref RELATIVE_LINKS_REGEX: Regex = 
+    static ref RELATIVE_LINKS_REGEX: Regex =
         Regex::new(r#"\[(?P<text>.+)\]\((?P<url>[^ ]+)(?: "(?P<title>.+)")?\)"#).unwrap();
 }
 
@@ -100,7 +100,7 @@ pub fn gen_pkg_readme<'a>(
 
     let pkg_manifest = pkg.manifest();
     let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
-    
+
     let pkg_name = pkg_manifest.name();
     let doc_uri = pkg_manifest.metadata().documentation.as_ref();
 
@@ -136,7 +136,7 @@ pub fn gen_pkg_readme<'a>(
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
             let final_readme =
-                &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
+                &mut rewrite_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
             let res =
                 fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
             set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
@@ -231,30 +231,75 @@ fn find_readme_template<'a>(
     })
 }
 
-fn fix_doc_links(pkg_name: &str, readme: &str, doc_uri: Option<&str>) -> String {
+fn rewrite_doc_links(pkg_name: &str, readme: &str, doc_uri: Option<&str>) -> String {
     RELATIVE_LINKS_REGEX
-        .replace_all(&readme, |caps: &Captures| match caps.name("url") {
-            Some(url) if url.as_str().starts_with("../") => {
-                let parent_end = url.as_str()[3..].find('/').unwrap() + 3;
-                let parent = &url.as_str()[3..parent_end];
-                format!(
-                    "[{}]({}{}/latest/{}/{})",
-                    &caps.name("text").unwrap().as_str(),
-                    doc_uri.unwrap_or(DEFAULT_DOC_URI),
-                    parent.replace('_', "-"),
-                    parent,
-                    &url.as_str()[parent_end + 1..].replace("index.html", "")
-                )
-            }
-            Some(url) if url.as_str().starts_with("./") => format!(
-                "[{}]({}{}/latest/{}/{})",
-                &caps.name("text").unwrap().as_str(),
-                doc_uri.unwrap_or(DEFAULT_DOC_URI),
-                pkg_name,
-                pkg_name.replace('-', "_"),
-                &url.as_str()[2..]
-            ),
-            _ => caps[0].to_string(),
+        .replace_all(&readme, |caps: &Captures| {
+            rewrite_matched_doc_link(caps, pkg_name, doc_uri)
         })
         .into()
+}
+
+fn rewrite_matched_doc_link(caps: &Captures, pkg_name: &str, doc_uri: Option<&str>) -> String {
+    match caps.name("url") {
+        Some(url) if url.as_str().starts_with("../") => make_parent_doc_link(
+            caps.name("text").unwrap().as_str(),
+            &url.as_str()[3..],
+            doc_uri,
+        ),
+        Some(url) if url.as_str().starts_with("./") => make_relative_doc_link(
+            caps.name("text").unwrap().as_str(),
+            &url.as_str()[2..],
+            pkg_name,
+            doc_uri,
+        ),
+        _ => caps[0].to_string(),
+    }
+}
+
+fn make_parent_doc_link(title: &str, url: &str, doc_uri: Option<&str>) -> String {
+    let parent_end = url.find('/').unwrap();
+    let parent = &url[..parent_end];
+    format!(
+        "[{}]({}{}/latest/{}/{})",
+        title,
+        doc_uri.unwrap_or(DEFAULT_DOC_URI),
+        parent.replace('_', "-"),
+        parent,
+        &url[parent_end + 1..].replace("index.html", "")
+    )
+}
+
+fn make_relative_doc_link(title: &str, url: &str, pkg_name: &str, doc_uri: Option<&str>) -> String {
+    format!(
+        "[{}]({}{}/latest/{}/{})",
+        title,
+        doc_uri.unwrap_or(DEFAULT_DOC_URI),
+        pkg_name,
+        pkg_name.replace('-', "_"),
+        url
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::commands::readme::{make_parent_doc_link, make_relative_doc_link};
+
+    #[test]
+    fn test_make_relative_doc_link() {
+        let doc_uri = make_relative_doc_link("`Call`", "enum.Call.html", "pallet-staking", None);
+        assert_eq!(
+            doc_uri,
+            "[`Call`](https://docs.rs/pallet-staking/latest/pallet_staking/enum.Call.html)"
+                .to_owned()
+        )
+    }
+
+    #[test]
+    fn test_make_parent_doc_link() {
+        let doc_uri = make_parent_doc_link("Balances", "pallet_balances/index.html", None);
+        assert_eq!(
+            doc_uri,
+            "[Balances](https://docs.rs/pallet-balances/latest/pallet_balances/)".to_owned()
+        )
+    }
 }
