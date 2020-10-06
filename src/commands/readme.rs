@@ -17,7 +17,7 @@ static DEFAULT_DOC_URI: &str = "https://docs.rs/";
 lazy_static! {
     // See http://blog.michaelperrin.fr/2019/02/04/advanced-regular-expressions/
     static ref RELATIVE_LINKS_REGEX: Regex =
-        Regex::new(r#"\[(?P<text>.+)\]\((?P<url>[^ ]+)(?: "(?P<title>.+)")?\)"#).unwrap();
+        Regex::new(r#"\[(?P<text>[^\]]+)\]\((?P<url>[^ )]+)(?: "(?P<title>.+)")?\)"#).unwrap();
 }
 
 #[derive(Debug)]
@@ -241,14 +241,22 @@ fn rewrite_doc_links(pkg_name: &str, readme: &str, doc_uri: Option<&str>) -> Str
 
 fn rewrite_matched_doc_link(caps: &Captures, pkg_name: &str, doc_uri: Option<&str>) -> String {
     match caps.name("url") {
-        Some(url) if url.as_str().starts_with("../") => make_parent_doc_link(
+        // Skip absolute links
+        Some(url) if url.as_str().starts_with("http") => caps[0].to_string(),
+        // Handle relative links to sibling crate
+        Some(url) if url.as_str().starts_with("../") => make_sibling_doc_link(
             caps.name("text").unwrap().as_str(),
             &url.as_str()[3..],
             doc_uri,
         ),
-        Some(url) if url.as_str().starts_with("./") => make_relative_doc_link(
+        // Handle relative links to current crate
+        Some(url) => make_relative_doc_link(
             caps.name("text").unwrap().as_str(),
-            &url.as_str()[2..],
+            if url.as_str().starts_with("./") {
+                &url.as_str()[2..]
+            } else {
+                &url.as_str()
+            },
             pkg_name,
             doc_uri,
         ),
@@ -256,16 +264,16 @@ fn rewrite_matched_doc_link(caps: &Captures, pkg_name: &str, doc_uri: Option<&st
     }
 }
 
-fn make_parent_doc_link(title: &str, url: &str, doc_uri: Option<&str>) -> String {
-    let parent_end = url.find('/').unwrap();
-    let parent = &url[..parent_end];
+fn make_sibling_doc_link(title: &str, url: &str, doc_uri: Option<&str>) -> String {
+    let sibling_end = url.find('/').unwrap();
+    let sibling = &url[..sibling_end];
     format!(
         "[{}]({}{}/latest/{}/{})",
         title,
         doc_uri.unwrap_or(DEFAULT_DOC_URI),
-        parent.replace('_', "-"),
-        parent,
-        &url[parent_end + 1..].replace("index.html", "")
+        sibling.replace('_', "-"),
+        sibling,
+        &url[sibling_end + 1..].replace("index.html", "")
     )
 }
 
@@ -274,7 +282,7 @@ fn make_relative_doc_link(title: &str, url: &str, pkg_name: &str, doc_uri: Optio
         "[{}]({}{}/latest/{}/{})",
         title,
         doc_uri.unwrap_or(DEFAULT_DOC_URI),
-        pkg_name,
+        if doc_uri.is_none() { pkg_name } else { "" },
         pkg_name.replace('-', "_"),
         url
     )
@@ -282,7 +290,7 @@ fn make_relative_doc_link(title: &str, url: &str, pkg_name: &str, doc_uri: Optio
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::readme::{make_parent_doc_link, make_relative_doc_link};
+    use crate::commands::readme::{make_relative_doc_link, make_sibling_doc_link};
 
     #[test]
     fn test_make_relative_doc_link() {
@@ -295,8 +303,23 @@ mod tests {
     }
 
     #[test]
-    fn test_make_parent_doc_link() {
-        let doc_uri = make_parent_doc_link("Balances", "pallet_balances/index.html", None);
+    fn test_make_relative_doc_link_with_doc_uri() {
+        let doc_uri = make_relative_doc_link(
+            "`Call`",
+            "enum.Call.html",
+            "pallet-timestamp",
+            Some("https://docs.rs/pallet-timestamp"),
+        );
+        assert_eq!(
+            doc_uri,
+            "[`Call`](https://docs.rs/pallet-timestamp/latest/pallet_timestamp/enum.Call.html)"
+                .to_owned()
+        )
+    }
+
+    #[test]
+    fn test_make_sibling_doc_link() {
+        let doc_uri = make_sibling_doc_link("Balances", "pallet_balances/index.html", None);
         assert_eq!(
             doc_uri,
             "[Balances](https://docs.rs/pallet-balances/latest/pallet_balances/)".to_owned()
