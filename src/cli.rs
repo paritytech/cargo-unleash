@@ -471,10 +471,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             }
             let predicate = make_pkg_predicate(pkg_opts)?;
             let type_value = {
-                if &value == "true" {
-                    Value::from(true)
-                } else if &value == "false" {
-                    Value::from(true)
+                if let Ok(v) = bool::from_str(&value) {
+                    Value::from(v)
                 } else if let Ok(v) = i64::from_str(&value) {
                     Value::from(v)
                 } else {
