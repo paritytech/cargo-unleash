@@ -347,13 +347,11 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
         ignore_publish,
     } = args;
 
-    if !packages.is_empty() {
-        if !skip.is_empty() || !ignore_pre_version.is_empty() {
-            return Err(
-                "-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
-                    .into(),
-            );
-        }
+    if !packages.is_empty() && (!skip.is_empty() || !ignore_pre_version.is_empty()) {
+        return Err(
+            "-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
+                .into(),
+        );
     }
 
     let publish = move |p: &Package| {
@@ -381,7 +379,7 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
                 return false;
             }
             let name = p.name();
-            if skip.iter().find(|r| r.is_match(&name)).is_some() {
+            if skip.iter().any(|r| r.is_match(&name)) {
                 return false;
             }
             if p.version().is_prerelease() {
@@ -423,7 +421,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         fs::canonicalize(path)?
     };
 
-    let maybe_patch = |shouldnt_patch, predicate: &Box<dyn Fn(&Package) -> bool>| {
+    let maybe_patch = |shouldnt_patch, predicate: &dyn Fn(&Package) -> bool| {
         if shouldnt_patch {
             return Ok(());
         }
@@ -468,15 +466,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             value,
             pkg_opts,
         } => {
-            if name == "name".to_owned() {
+            if name == "name" {
                 return Err("To change the name please use the rename command!".into());
             }
             let predicate = make_pkg_predicate(pkg_opts)?;
             let type_value = {
-                if &value == "true" {
-                    Value::from(true)
-                } else if &value == "false" {
-                    Value::from(true)
+                if let Ok(v) = bool::from_str(&value) {
+                    Value::from(v)
                 } else if let Ok(v) = i64::from_str(&value) {
                     Value::from(v)
                 } else {
