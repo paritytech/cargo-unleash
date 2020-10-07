@@ -16,7 +16,7 @@ static DEFAULT_DOC_URI: &str = "https://docs.rs/";
 
 lazy_static! {
     // See http://blog.michaelperrin.fr/2019/02/04/advanced-regular-expressions/
-    static ref RELATIVE_LINKS_REGEX: Regex = 
+    static ref RELATIVE_LINKS_REGEX: Regex =
         Regex::new(r#"\[(?P<text>.+)\]\((?P<url>[^ ]+)(?: "(?P<title>.+)")?\)"#).unwrap();
 }
 
@@ -100,7 +100,7 @@ pub fn gen_pkg_readme<'a>(
 
     let pkg_manifest = pkg.manifest();
     let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
-    
+
     let pkg_name = pkg_manifest.name();
     let doc_uri = pkg_manifest.metadata().documentation.as_ref();
 
@@ -135,8 +135,10 @@ pub fn gen_pkg_readme<'a>(
             if mode == &GenerateReadmeMode::Append && existing_res.is_ok() {
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
-            let final_readme = &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
-            let res = fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
+            let final_readme =
+                &mut fix_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
+            let res =
+                fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
             set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
             res
         }
