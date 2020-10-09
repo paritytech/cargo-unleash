@@ -158,4 +158,4 @@ _You are using the tooling and want to be mentioned here–[create an issue](htt
 
 This Software is released under the [GNU General Public License (GPL) 3.0](https://www.gnu.org/licenses/gpl-3.0.en.html).
 
-This, as any other software, is build on the shoulders of giants. In particular, this uses `cargo` internally and draws heavily on the knowledge established by [cargo publish-all](https://torkleyy.gitlab.io/cargo-publish-all/) and [cargo hack](https://github.com/taiki-e/cargo-hack).
+This, as any other software, is build on the shoulders of giants. In particular, this uses `cargo` internally and draws heavily on the knowledge established by [cargo publish-all](https://gitlab.com/torkleyy/cargo-publish-all) and [cargo hack](https://github.com/taiki-e/cargo-hack).
