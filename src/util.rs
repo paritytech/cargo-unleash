@@ -3,7 +3,6 @@ use cargo::{
     sources::PathSource,
 };
 use log::warn;
-use serde::Deserialize;
 use std::{error::Error, fs};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 
@@ -169,16 +168,4 @@ where
         }
     }
     counter
-}
-
-#[derive(Deserialize)]
-pub struct Versions {
-    pub versions: Vec<Version>,
-}
-
-#[derive(Deserialize)]
-pub struct Version {
-    #[serde(rename = "num")]
-    pub version: semver::Version,
-    pub yanked: bool,
 }
