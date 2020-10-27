@@ -416,7 +416,7 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
 
     }
 
-    let changed = util::changed_packages(ws, &changed_since);
+    let changed = util::changed_packages(ws, &changed_since)?;
     if changed.len() == 0 {
         return Err("No changes detected".into())
     };
