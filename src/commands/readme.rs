@@ -1,5 +1,8 @@
 use crate::cli::GenerateReadmeMode;
+use crate::commands;
 use cargo::core::{Manifest, Package, Workspace};
+use lazy_static::lazy_static;
+use regex::{Captures, Regex};
 use sha1::Sha1;
 use std::{
     error::Error,
@@ -7,6 +10,15 @@ use std::{
     fs::{self, File},
     path::{Path, PathBuf},
 };
+use toml_edit::Value;
+
+static DEFAULT_DOC_URI: &str = "https://docs.rs/";
+
+lazy_static! {
+    // See http://blog.michaelperrin.fr/2019/02/04/advanced-regular-expressions/
+    static ref RELATIVE_LINKS_REGEX: Regex =
+        Regex::new(r#"\[(?P<text>[^\]]+)\]\((?P<url>[^ )]+)(?: "(?P<title>.+)")?\)"#).unwrap();
+}
 
 #[derive(Debug)]
 pub enum CheckReadmeResult {
@@ -63,17 +75,16 @@ pub fn check_pkg_readme<'a>(
 }
 
 pub fn gen_all_readme<'a>(
-    packages: &Vec<Package>,
+    packages: Vec<Package>,
     ws: &Workspace<'a>,
     readme_mode: GenerateReadmeMode,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
-
     c.shell().status("Generating", "Readme files")?;
-    for pkg in packages.iter() {
-        let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
-        gen_pkg_readme(ws, &pkg_path, &pkg.manifest(), &readme_mode)
-            .map_err(|e| format!("Failure generating Readme for {:}: {}", pkg.name(), e))?
+    for pkg in packages.into_iter() {
+        let pkg_name = &pkg.name().clone();
+        gen_pkg_readme(ws, pkg, &readme_mode)
+            .map_err(|e| format!("Failure generating Readme for {:}: {}", pkg_name, e))?
     }
 
     Ok(())
@@ -81,12 +92,17 @@ pub fn gen_all_readme<'a>(
 
 pub fn gen_pkg_readme<'a>(
     ws: &Workspace<'a>,
-    pkg_path: &Path,
-    pkg_manifest: &Manifest,
+    pkg: Package,
     mode: &GenerateReadmeMode,
 ) -> Result<(), String> {
     let c = ws.config();
     let root_path = ws.root();
+
+    let pkg_manifest = pkg.manifest();
+    let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
+
+    let pkg_name = pkg_manifest.name();
+    let doc_uri = pkg_manifest.metadata().documentation.as_ref();
 
     let mut pkg_source = find_entrypoint(pkg_path)?;
     let readme_path = pkg_path.join("README.md");
@@ -95,12 +111,9 @@ pub fn gen_pkg_readme<'a>(
     match (mode, pkg_readme) {
         (GenerateReadmeMode::IfMissing, Ok(_existing_readme)) => {
             c.shell()
-                .status(
-                    "Skipping",
-                    format!("{}: Readme already exists.", &pkg_manifest.name()),
-                )
+                .status("Skipping", format!("{}: Readme already exists.", &pkg_name))
                 .map_err(|e| format!("{:}", e))?;
-
+            set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
             Ok(())
         }
         (mode, existing_res) => {
@@ -110,7 +123,7 @@ pub fn gen_pkg_readme<'a>(
                     "Generating",
                     format!(
                         "Readme for {} (template: {:?})",
-                        &pkg_manifest.name(),
+                        &pkg_name,
                         match &template_path {
                             Some(p) => p.strip_prefix(&root_path).unwrap_or(p).to_str().unwrap(),
                             None => "none found",
@@ -122,7 +135,12 @@ pub fn gen_pkg_readme<'a>(
             if mode == &GenerateReadmeMode::Append && existing_res.is_ok() {
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
-            fs::write(readme_path, new_readme.as_bytes()).map_err(|e| format!("{:}", e))
+            let final_readme =
+                &mut rewrite_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
+            let res =
+                fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
+            set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
+            res
         }
     }
 }
@@ -143,6 +161,15 @@ fn generate_readme<'a>(
         false,
         true,
         false,
+    )
+}
+
+fn set_readme_field(pkg: Package) -> Result<(), Box<dyn Error>> {
+    commands::set_field(
+        vec![pkg].iter(),
+        "package".to_owned(),
+        "readme".to_owned(),
+        Value::from("README.md"),
     )
 }
 
@@ -202,4 +229,100 @@ fn find_readme_template<'a>(
     } else {
         None
     })
+}
+
+fn rewrite_doc_links(pkg_name: &str, readme: &str, doc_uri: Option<&str>) -> String {
+    RELATIVE_LINKS_REGEX
+        .replace_all(&readme, |caps: &Captures| {
+            rewrite_matched_doc_link(caps, pkg_name, doc_uri)
+        })
+        .into()
+}
+
+fn rewrite_matched_doc_link(caps: &Captures, pkg_name: &str, doc_uri: Option<&str>) -> String {
+    match caps.name("url") {
+        // Skip absolute links
+        Some(url) if url.as_str().starts_with("http") => caps[0].to_string(),
+        // Handle relative links to sibling crate
+        Some(url) if url.as_str().starts_with("../") => make_sibling_doc_link(
+            caps.name("text").unwrap().as_str(),
+            &url.as_str()[3..],
+            doc_uri,
+        ),
+        // Handle relative links to current crate
+        Some(url) => make_relative_doc_link(
+            caps.name("text").unwrap().as_str(),
+            if url.as_str().starts_with("./") {
+                &url.as_str()[2..]
+            } else {
+                &url.as_str()
+            },
+            pkg_name,
+            doc_uri,
+        ),
+        _ => caps[0].to_string(),
+    }
+}
+
+fn make_sibling_doc_link(title: &str, url: &str, doc_uri: Option<&str>) -> String {
+    let sibling_end = url.find('/').unwrap();
+    let sibling = &url[..sibling_end];
+    format!(
+        "[{}]({}{}/latest/{}/{})",
+        title,
+        doc_uri.unwrap_or(DEFAULT_DOC_URI),
+        sibling.replace('_', "-"),
+        sibling,
+        &url[sibling_end + 1..].replace("index.html", "")
+    )
+}
+
+fn make_relative_doc_link(title: &str, url: &str, pkg_name: &str, doc_uri: Option<&str>) -> String {
+    format!(
+        "[{}]({}{}/latest/{}/{})",
+        title,
+        doc_uri.unwrap_or(DEFAULT_DOC_URI),
+        if doc_uri.is_none() { pkg_name } else { "" },
+        pkg_name.replace('-', "_"),
+        url
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::commands::readme::{make_relative_doc_link, make_sibling_doc_link};
+
+    #[test]
+    fn test_make_relative_doc_link() {
+        let doc_uri = make_relative_doc_link("`Call`", "enum.Call.html", "pallet-staking", None);
+        assert_eq!(
+            doc_uri,
+            "[`Call`](https://docs.rs/pallet-staking/latest/pallet_staking/enum.Call.html)"
+                .to_owned()
+        )
+    }
+
+    #[test]
+    fn test_make_relative_doc_link_with_doc_uri() {
+        let doc_uri = make_relative_doc_link(
+            "`Call`",
+            "enum.Call.html",
+            "pallet-timestamp",
+            Some("https://docs.rs/pallet-timestamp"),
+        );
+        assert_eq!(
+            doc_uri,
+            "[`Call`](https://docs.rs/pallet-timestamp/latest/pallet_timestamp/enum.Call.html)"
+                .to_owned()
+        )
+    }
+
+    #[test]
+    fn test_make_sibling_doc_link() {
+        let doc_uri = make_sibling_doc_link("Balances", "pallet_balances/index.html", None);
+        assert_eq!(
+            doc_uri,
+            "[Balances](https://docs.rs/pallet-balances/latest/pallet_balances/)".to_owned()
+        )
+    }
 }

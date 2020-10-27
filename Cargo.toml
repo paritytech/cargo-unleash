@@ -18,8 +18,7 @@ path = "src/main.rs"
 
 [features]
 default = []
-gen-readme = ["cargo-readme", "sha1"]
-
+gen-readme = ["cargo-readme","lazy_static","sha1"]
 
 [dependencies]
 structopt = "0.3.9"
@@ -42,4 +41,5 @@ git2 = "0.13.10"
 
 # Optional dependencies
 cargo-readme = { version="3.2", optional = true }
+lazy_static = { version = "1.4", optional = true }
 sha1 = { version="0.6", optional = true }

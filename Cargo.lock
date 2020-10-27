@@ -201,6 +201,7 @@ dependencies = [
  "flexi_logger",
  "futures",
  "git2",
+ "lazy_static",
  "log",
  "petgraph",
  "regex",

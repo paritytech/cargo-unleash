@@ -22,7 +22,7 @@ pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Vec<Package> 
         .find_reference(reference)
         .and_then(|d| d.peel_to_commit())
         .and_then(|c| c.tree())
-        .expect(format!("Reference {:?} not found in git repository", reference));
+        .expect("Reference not found in git repository");
 
     let diff = repo
         .diff_tree_to_tree(Some(&current_head), Some(&main), None)
@@ -46,7 +46,6 @@ pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Vec<Package> 
             }
         }
     }
-
 }
 
 // Find all members of the workspace, into the total depth
@@ -55,7 +54,7 @@ pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
     for m in ws.members() {
         total_list.push(m.clone());
         for dep in m.dependencies() {
-            let source = dep.source_id().clone();
+            let source = dep.source_id();
             if source.is_path() {
                 let dst = source
                     .url()
@@ -109,13 +108,13 @@ pub enum DependencyAction {
 /// Iterate through the dependency sections of root, find each
 /// dependency entry, that is a subsection and hand it and its name
 /// to f. Return the counter of how many times f returned true.
-pub fn edit_each_dep<'a, F>(root: &'a mut Table, f: F) -> u32
+pub fn edit_each_dep<F>(root: &mut Table, f: F) -> u32
 where
     F: Fn(String, Option<String>, DependencyEntry) -> DependencyAction,
 {
     let mut counter = 0;
     let mut removed = Vec::new();
-    for k in vec!["dependencies", "dev-dependencies", "build-dependencies"] {
+    for k in &["dependencies", "dev-dependencies", "build-dependencies"] {
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
                 t.iter()
@@ -137,7 +136,7 @@ where
             let (name, action) = match t.entry(&key) {
                 Item::Value(Value::InlineTable(info)) => {
                     let (name, alias) = {
-                        if let Some(name) = info.get("package").clone() {
+                        if let Some(name) = info.get("package") {
                             // is there a rename
                             (name
                                 .as_str()
@@ -152,7 +151,7 @@ where
                 }
                 Item::Table(info) => {
                     let (name, alias) = {
-                        if let Some(name) = info.get("package").clone() {
+                        if let Some(name) = info.get("package") {
                             // is there a rename
                             (name
                                 .as_str()
@@ -193,7 +192,7 @@ where
                     let mut to_remove = Vec::new();
                     for (idx, dep) in deps.iter().enumerate() {
                         if let Value::String(s) = dep {
-                            if let Some(s) = s.value().trim().split("/").next() {
+                            if let Some(s) = s.value().trim().split('/').next() {
                                 if removed.contains(&s.to_owned()) {
                                     to_remove.push(idx);
                                 }
@@ -270,11 +269,9 @@ async fn fetch_cratesio_versions(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let fts = crates.into_iter().map(move |name| {
-        let c = client.clone();
-        let n = name.to_string();
-        fetch(c, n.clone()).map(move |r| (n, r))
-    });
+    let fts = crates
+        .into_iter()
+        .map(move |name| fetch(client.clone(), name.clone()).map(move |r| (name, r)));
 
     let (success, failures): (Vec<_>, Vec<_>) = futures::future::join_all(fts)
         .await
@@ -294,6 +291,6 @@ async fn fetch_cratesio_versions(
 
     Ok(success
         .into_iter()
-        .map(move |(name, r)| (name.clone(), r.expect("We partioned based on error")))
+        .map(move |(name, r)| (name, r.expect("We partioned based on error")))
         .collect::<HashMap<String, _>>())
 }

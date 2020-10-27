@@ -82,7 +82,7 @@ fn run_check(
     // package has a workspace we can still build our new crate.
     let (src, new_pkg) = {
         let id = SourceId::for_path(&dst)?;
-        let mut src = PathSource::new(&dst, id.clone(), ws.config());
+        let mut src = PathSource::new(&dst, id, ws.config());
         let new_pkg = src.root_package()?;
 
         // inject our local builds
@@ -147,7 +147,7 @@ fn run_check(
     Ok(())
 }
 
-fn check_dependencies<'a>(package: &'a Package) -> Result<(), String> {
+fn check_dependencies(package: &Package) -> Result<(), String> {
     let git_deps = package
         .dependencies()
         .iter()
@@ -163,18 +163,18 @@ fn check_dependencies<'a>(package: &'a Package) -> Result<(), String> {
 
 // ensure metadata is set
 // https://doc.rust-lang.org/cargo/reference/publishing.html#before-publishing-a-new-crate
-fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
+fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
     let mut bad_fields = Vec::new();
-    if metadata.authors.len() == 0 {
+    if metadata.authors.is_empty() {
         bad_fields.push("authors is empty")
     }
-    match metadata.description {
-        Some(ref s) if s.len() == 0 => bad_fields.push("description is empty"),
+    match metadata.description.as_deref() {
+        Some("") => bad_fields.push("description is empty"),
         None => bad_fields.push("description is missing"),
         _ => {}
     }
-    match metadata.repository {
-        Some(ref s) if s.len() == 0 => bad_fields.push("repository is empty"),
+    match metadata.repository.as_deref() {
+        Some("") => bad_fields.push("repository is empty"),
         None => bad_fields.push("repository is missing"),
         _ => {}
     }
@@ -184,7 +184,7 @@ fn check_metadata<'a>(metadata: &'a ManifestMetadata) -> Result<(), String> {
         _ => bad_fields.push("Neither license nor license_file is provided"),
     }
 
-    if bad_fields.len() == 0 {
+    if bad_fields.is_empty() {
         Ok(())
     } else {
         Err(bad_fields.join("; "))
@@ -202,8 +202,8 @@ fn check_readme<'a>(_ws: &Workspace<'a>, _pkg: &Package) -> Result<(), String> {
     unreachable!()
 }
 
-pub fn check<'a, 'r>(
-    packages: &Vec<Package>,
+pub fn check<'a>(
+    packages: &[Package],
     ws: &Workspace<'a>,
     build: bool,
     check_readme: bool,
@@ -253,12 +253,11 @@ pub fn check<'a, 'r>(
         res
     });
 
-    let errors_count = errors.iter().map(|s| error!("{:#?}", s)).count();
-
+    errors.iter().for_each(|s| error!("{:#?}", s));
     if errors.len() > 0 {
         return Err(format!(
             "Soft checkes failed with {} errors (see above)",
-            errors_count
+            errors.len()
         )
         .into());
     }
@@ -276,12 +275,11 @@ pub fn check<'a, 'r>(
             res
         });
 
-        let errors_count = errors.iter().map(|s| error!("{:#?}", s)).count();
-
+        errors.iter().for_each(|s| error!("{:#?}", s));
         if errors.len() > 0 {
             return Err(format!(
                 "{} readme file(s) need to be updated (see above).",
-                errors_count
+                errors.len()
             )
             .into());
         }
@@ -298,21 +296,18 @@ pub fn check<'a, 'r>(
             .map_err(|e| format!("{:}", e))?;
         match package(&pkg_ws, &opts) {
             Ok(Some(rw_lock)) => Ok((pkg_ws, rw_lock)),
-            Ok(None) => Err(format!("Failure packing {:}", pkg.name()).into()),
-            Err(e) => Err(format!("Failure packing {:}: {}", pkg.name(), e).into()),
+            Ok(None) => Err(format!("Failure packing {:}", pkg.name())),
+            Err(e) => Err(format!("Failure packing {:}: {}", pkg.name(), e)),
         }
     });
 
-    let (errors, successes): (Vec<_>, Vec<_>) =
-        builds.partition(|r: &Result<(Workspace<'_>, FileLock), String>| r.is_err());
+    let (errors, successes): (Vec<_>, Vec<_>) = builds.partition(Result::is_err);
 
-    let errors_count = errors
-        .iter()
-        .map(|r| r.as_ref().map_err(|e| error!("{:#?}", e)))
-        .count();
-
-    if errors_count > 0 {
-        return Err(format!("Packing failed with {} errors (see above)", errors_count).into());
+    for e in errors.iter().filter_map(|res| res.as_ref().err()) {
+        error!("{:#?}", e);
+    }
+    if errors.len() > 0 {
+        return Err(format!("Packing failed with {} errors (see above)", errors.len()).into());
     };
 
     let build_mode = if build {
