@@ -3,31 +3,36 @@ use cargo::{
     sources::PathSource,
 };
 use git2::Repository;
-use log::warn;
+use log::{trace, warn};
 use std::{collections::HashSet, error::Error, fs};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 
-pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> HashSet<Package> {
+pub fn changed_packages<'a>(
+    ws: &'a Workspace,
+    reference: &str,
+) -> Result<HashSet<Package>, String> {
+    ws.config()
+        .shell()
+        .status("Calculating", format!("git diff since {:}", reference))
+        .expect("Writing to Shell doesn't fail");
+
     let path = ws.root();
-    println!("{:?}", path);
-    let repo = Repository::open(&path).expect("Workspace isn't a git repo");
+    let repo =
+        Repository::open(&path).map_err(|e| format!("Workspace isn't a git repo: {:?}", e))?;
     let current_head = repo
         .head()
         .and_then(|b| b.peel_to_commit())
         .and_then(|c| c.tree())
-        .expect("Could not determine current git HEAD");
+        .map_err(|e| format!("Could not determine current git HEAD: {:?}", e))?;
     let main = repo
-        .find_reference(reference)
+        .resolve_reference_from_short_name(reference)
         .and_then(|d| d.peel_to_commit())
         .and_then(|c| c.tree())
-        .expect(&format!(
-            "Reference {:?} not found in git repository",
-            reference
-        ));
+        .map_err(|e| format!("Reference not found in git repository: {:?}", e))?;
 
     let diff = repo
         .diff_tree_to_tree(Some(&current_head), Some(&main), None)
-        .expect("Diffing failed");
+        .map_err(|e| format!("Diffing failed: {:?}", e))?;
 
     let files = diff
         .deltas()
@@ -35,6 +40,8 @@ pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> HashSet<Packa
         .filter_map(|d| if d.is_file() { d.parent() } else { Some(d) })
         .map(|l| path.join(l))
         .collect::<Vec<_>>();
+
+    trace!("Files changed since: {:#?}", files);
 
     let mut packages = HashSet::new();
 
@@ -48,7 +55,7 @@ pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> HashSet<Packa
         }
     }
 
-    packages
+    Ok(packages)
 }
 
 // Find all members of the workspace, into the total depth
