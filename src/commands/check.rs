@@ -224,6 +224,8 @@ pub fn check<'a>(
         })
         .collect::<HashMap<_, _>>();
 
+    // FIXME: make build config configurable
+    //        https://github.com/paritytech/cargo-unleash/issues/20
     let opts = PackageOpts {
         config: c,
         verify: false,
@@ -233,8 +235,8 @@ pub fn check<'a>(
         all_features: false,
         no_default_features: false,
         jobs: None,
-        targets: Vec::new(),
-        features: Vec::new(),
+        targets: Default::default(),
+        features: Default::default(),
     };
 
     c.shell().status("Checking", "Metadata & Dependencies")?;
