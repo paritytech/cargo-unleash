@@ -2,11 +2,8 @@ use cargo::{
     core::{package::Package, Workspace},
     sources::PathSource,
 };
-use futures::future::FutureExt;
 use log::warn;
-use serde::Deserialize;
-use std::{collections::HashMap, error::Error, fs, time::Duration};
-use tokio::runtime::Runtime;
+use std::{error::Error, fs};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 use petgraph::Graph;
 use git2::{Repository};
@@ -211,86 +208,4 @@ where
         }
     }
     counter
-}
-
-#[derive(Deserialize)]
-pub struct Versions {
-    pub versions: Vec<Version>,
-}
-
-#[derive(Deserialize)]
-pub struct Version {
-    #[serde(rename = "num")]
-    pub version: semver::Version,
-    pub yanked: bool,
-}
-
-static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
-
-pub fn fetch_many_cratesio_versions(
-    crates: Vec<String>,
-) -> Result<HashMap<String, Vec<Version>>, String> {
-    let mut rt = Runtime::new().map_err(|e| e.to_string())?;
-    rt.block_on(fetch_cratesio_versions(crates))
-}
-
-async fn fetch(client: reqwest::Client, name: String) -> Result<Vec<Version>, String> {
-    let url = format!(
-        "https://crates.io/api/v1/crates/{crate_name}/versions",
-        crate_name = name
-    );
-    match client.get(&url).send().await {
-        Ok(response) => {
-            if response.status() == reqwest::StatusCode::NOT_FOUND {
-                return Ok(vec![]);
-            }
-            Ok(response
-                .json::<Versions>()
-                .await
-                .map_err(|e| e.to_string())?
-                .versions)
-        }
-        Err(e) => {
-            if e.status() == Some(reqwest::StatusCode::NOT_FOUND) {
-                return Ok(vec![]);
-            }
-            Err(e.to_string())
-        }
-    }
-}
-
-async fn fetch_cratesio_versions(
-    crates: Vec<String>,
-) -> Result<HashMap<String, Vec<Version>>, String> {
-    let timeout = Duration::from_secs(10);
-    let client = reqwest::ClientBuilder::new()
-        .connect_timeout(timeout)
-        .user_agent(APP_USER_AGENT)
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let fts = crates
-        .into_iter()
-        .map(move |name| fetch(client.clone(), name.clone()).map(move |r| (name, r)));
-
-    let (success, failures): (Vec<_>, Vec<_>) = futures::future::join_all(fts)
-        .await
-        .into_iter()
-        .partition(|(_, r)| r.is_ok());
-
-    if failures.len() > 0 {
-        return Err(format!(
-            "Failure fetching crates versions: {:}",
-            failures
-                .into_iter()
-                .map(|(n, e)| format!("{:}: {:}", n, e.err().expect("we partioned based on error")))
-                .collect::<Vec<_>>()
-                .join("; ")
-        ));
-    }
-
-    Ok(success
-        .into_iter()
-        .map(move |(name, r)| (name, r.expect("We partioned based on error")))
-        .collect::<HashMap<String, _>>())
 }
