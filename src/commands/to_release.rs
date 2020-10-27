@@ -37,30 +37,26 @@ where
 
 
     let mut already_published = HashSet::new();
+    let mut registry = RegistrySource::remote(
+        SourceId::crates_io(ws.config())
+            .expect("Your main registry (usually crates.io) can't be read. Please check your .cargo/config"),
+        &Default::default(),
+        ws.config()
+    );
+    let lock = ws.config().acquire_package_cache_lock();
 
-    { // to kepe the lock only around this block
-        let _lock = ws.config().acquire_package_cache_lock();
+    registry.update().expect("Updating from remote registry failed :( .");
 
-        let mut registry = RegistrySource::remote(
-            SourceId::crates_io(ws.config())
-                .expect("Your main registry (usually crates.io) can't be read. Please check your .cargo/config"),
-            &Default::default(),
-            ws.config()
-        );
-
-
-        registry.update().expect("Updating from remote registry failed :( .");
-
-
-        for m in members.iter() {
-            let dep = Dependency::parse_no_deprecated(m.name(), Some(&m.version().to_string()), registry.source_id())
-                .expect("Parsing our dependency doesn't fail");
-            registry.query(&dep, &mut |_| {
-                already_published.insert(m.name());
-            }).expect("Quering the local registry doesn't fail");
-        }
-        // drop the global package lock
+    for m in members.iter() {
+        let dep = Dependency::parse_no_deprecated(m.name(), Some(&m.version().to_string()), registry.source_id())
+            .expect("Parsing our dependency doesn't fail");
+        registry.query(&dep, &mut |_| {
+            already_published.insert(m.name());
+        }).expect("Quering the local registry doesn't fail");
     }
+
+    // drop the global package lock
+    drop(lock);
 
     let map = members
         .into_iter()
