@@ -24,9 +24,9 @@ pub fn release<'a>(
         no_default_features: false,
         index: None,
         jobs: None,
-        target: None,
+        targets: Default::default(),
         registry: None,
-        features: Vec::new(),
+        features: Default::default(),
     };
 
     let delay = {
