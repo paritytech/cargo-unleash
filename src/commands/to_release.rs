@@ -1,5 +1,10 @@
-use crate::util::{fetch_many_cratesio_versions, members_deep};
-use cargo::core::{package::Package, Workspace};
+use crate::util::members_deep;
+use cargo::{
+    core::{package::Package, Workspace, SourceId, Dependency, Source},
+    sources::registry::{
+        RegistrySource,
+    },
+};
 use log::{trace, warn};
 use petgraph::Graph;
 use std::collections::{HashMap, HashSet};
@@ -30,25 +35,25 @@ where
         .status("Syncing", "Versions from crates.io")
         .expect("Writing to Shell doesn't fail");
 
-    let published_versions = fetch_many_cratesio_versions(
-        members
-            .iter()
-            .map(|m| m.name().to_string())
-            .collect::<Vec<_>>(),
-    )?;
-    let already_published = members
-        .iter()
-        .filter_map(|member| {
-            if let Some(versions) = published_versions.get(&member.name().to_string()) {
-                for v in versions {
-                    if &v.version == member.version() {
-                        return Some(member.name());
-                    }
-                }
-            }
-            None
-        })
-        .collect::<HashSet<_>>();
+
+    let mut registry = RegistrySource::remote(
+        SourceId::crates_io(ws.config())
+            .expect("Your main registry (usually crates.io) can't be read. Please check your .cargo/config"),
+        &Default::default(),
+        ws.config()
+    );
+
+    registry.update().expect("Updating from remote registry failed :( .");
+
+    let mut already_published = HashSet::new();
+
+    for m in members.iter() {
+        let dep = Dependency::parse_no_deprecated(m.name(), Some(&m.version().to_string()), registry.source_id())
+            .expect("Parsing our dependency doesn't fail");
+        registry.query(&dep, &mut |_| {
+            already_published.insert(m.name());
+        }).expect("Quering the local registry doesn't fail");
+    }
 
     let map = members
         .into_iter()
