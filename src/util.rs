@@ -39,8 +39,13 @@ where
         let manifest_path = pkg.manifest_path();
         let content = fs::read_to_string(manifest_path)?;
         let mut doc: Document = content.parse()?;
-        results.push(f(pkg, &mut doc)?);
-        fs::write(manifest_path, doc.to_string())?;
+        let res = f(pkg, &mut doc)?;
+        let new_doc = doc.to_string();
+        if content != new_doc {
+            fs::write(format!("{:?}.bak", manifest_path), content)?;
+            fs::write(manifest_path, new_doc)?;
+            results.push(res);
+        }
     }
     Ok(results)
 }
