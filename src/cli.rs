@@ -40,7 +40,6 @@ pub struct PackageSelectOptions {
     /// Only use the specfic set of packages
     ///
     /// Apply only to the packages named as defined. This is mutually exclusive with skip and ignore-version-pre.
-    /// Default: []
     #[structopt(short, long, parse(from_str))]
     pub packages: Vec<InternedString>,
     /// Skip the package names matching ...
@@ -52,14 +51,14 @@ pub struct PackageSelectOptions {
     /// Ignore version pre-releases
     ///
     /// Skip if the SemVer pre-release field is any of the listed. Mutually exclusive with `--package`
-    #[structopt(short = "i", long="ignore-pre-version", parse(from_str = parse_identifiers))]
+    #[structopt(short, long, parse(from_str = parse_identifiers))]
     pub ignore_pre_version: Vec<Identifier>,
     /// Ignore whether `publish` is set.
     ///
     /// If nothing else is specified `publish = true` is assumed for every package. If publish
     /// is set to false or any registry, it is ignore by default. If you want to include it
     /// regardless, set this flag.
-    #[structopt(long = "ignore-publish")]
+    #[structopt(long)]
     ignore_publish: bool,
 }
 
@@ -72,7 +71,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
@@ -82,7 +81,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Increase the patch version, unset prerelease
@@ -92,7 +91,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Increase the minor version, unset prerelease and patch
@@ -102,7 +101,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Increase the major version, unset prerelease, minor and patch
@@ -112,7 +111,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Hard set version to given string
@@ -124,7 +123,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Set the pre-release to string
@@ -137,7 +136,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
     /// Set the metadata to string
@@ -150,7 +149,7 @@ pub enum VersionCommand {
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
-        #[structopt(long = "force-update")]
+        #[structopt(long)]
         force_update: bool,
     },
 }
@@ -250,14 +249,14 @@ pub enum Command {
         ///
         /// By default, this only runs `cargo check` against the package
         /// build. Set this flag to have it run an actual `build` instead.
-        #[structopt(long = "build")]
+        #[structopt(long)]
         build: bool,
         /// Generate & verify whether the Readme file has changed.
         ///
         /// When enabled, this will generate a Readme file from
         /// the crate's doc comments (using cargo-readme), and
         /// check whether the existing Readme (if any) matches.
-        #[structopt(long = "check-readme")]
+        #[structopt(long)]
         check_readme: bool,
     },
     /// Generate Readme files
@@ -272,7 +271,7 @@ pub enum Command {
         ///
         /// Depending on the chosen option, this will generate a Readme
         /// file from the crate's doc comments (using cargo-readme).
-        #[structopt(long = "readme-mode")]
+        #[structopt(long)]
         #[structopt(
             possible_values = &GenerateReadmeMode::variants(),
             case_insensitive = true
@@ -295,13 +294,13 @@ pub enum Command {
         ///
         /// By default, this only runs `cargo check` against the package
         /// build. Set this flag to have it run an actual `build` instead.
-        #[structopt(long = "build")]
+        #[structopt(long)]
         build: bool,
         /// dry run
-        #[structopt(long = "dry-run")]
+        #[structopt(long)]
         dry_run: bool,
         /// dry run
-        #[structopt(long = "no-check")]
+        #[structopt(long)]
         no_check: bool,
         /// Ensure we have the owner set as well
         #[structopt(long = "owner")]
@@ -314,7 +313,7 @@ pub enum Command {
         /// When enabled, this will generate a Readme file from
         /// the crate's doc comments (using cargo-readme), and
         /// check whether the existing Readme (if any) matches.
-        #[structopt(long = "check-readme")]
+        #[structopt(long)]
         check_readme: bool,
     },
 }
@@ -329,13 +328,13 @@ pub struct Opt {
     ///
     /// Can either be the folder if the file is named `Cargo.toml` or the path
     /// to the specific `.toml`-manifest to load as the cargo workspace.
-    #[structopt(short = "m", long, parse(from_os_str), default_value = "./")]
+    #[structopt(short, long, parse(from_os_str), default_value = "./")]
     pub manifest_path: PathBuf,
     /// Specify the log levels.
-    #[structopt(long = "log", short = "l", default_value = "warn")]
+    #[structopt(short, long, default_value = "warn")]
     pub log: String,
     /// Show verbose cargo output
-    #[structopt(long = "verbose", short = "v")]
+    #[structopt(short, long)]
     pub verbose: bool,
 
     #[structopt(subcommand)]
