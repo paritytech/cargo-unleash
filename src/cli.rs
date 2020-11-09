@@ -349,7 +349,7 @@ pub struct Opt {
     pub cmd: Command,
 }
 
-fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package) -> bool>, String> {
+fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<impl Fn(&Package) -> bool, String> {
     let PackageSelectOptions {
         packages,
         skip,
@@ -408,18 +408,17 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
         value
     };
 
-    if !packages.is_empty() {
-        trace!("going for matching against {:?}", packages);
-        return Ok(Box::new(move |p: &Package| {
-            publish(p) && packages.contains(&p.name())
-        }));
-    }
+    Ok(move |p: &Package| {
+        if !publish(p) {
+            return false;
+        }
 
-    if !skip.is_empty() || !ignore_pre_version.is_empty() {
-        return Ok(Box::new(move |p: &Package| {
-            if !publish(p) {
-                return false;
-            }
+        if !packages.is_empty() {
+            trace!("going for matching against {:?}", packages);
+            return packages.contains(&p.name());
+        }
+
+        if !skip.is_empty() || !ignore_pre_version.is_empty() {
             let name = p.name();
             if skip.iter().any(|r| r.is_match(&name)) {
                 return false;
@@ -431,11 +430,10 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
                     }
                 }
             }
-            true
-        }));
-    }
+        }
 
-    Ok(Box::new(publish))
+        true
+    })
 }
 
 fn verify_readme_feature() -> Result<(), String> {
