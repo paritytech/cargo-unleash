@@ -64,9 +64,8 @@ pub struct PackageSelectOptions {
     /// Automatically detect the packages, which changed compared to the given git commit.
     ///
     /// Compares the current git `head` to the reference given, identifies which files changed
-    /// and attempts to identify the packages and its dependents through that mechanism. You
-    /// can use any `tag`, `branch` or `commit`, but you must be sure it is available
-    /// (and up to date) locally.
+    /// and attempts to identify the packages through that mechanism. You can use any
+    /// `tag`, `branch` or `commit`, but you must be sure it is available (and up to date) locally.
     #[structopt(short, long, name = "git-ref")]
     pub changed_since: Option<String>,
 }
