@@ -67,8 +67,8 @@ pub struct PackageSelectOptions {
     /// and attempts to identify the packages and its dependents through that mechanism. You
     /// can use any `tag`, `branch` or `commit`, but you must be sure it is available
     /// (and up to date) locally.
-    #[structopt(short, long)]
-    pub changed_since: String,
+    #[structopt(short, long, name = "git-ref")]
+    pub changed_since: Option<String>,
 }
 
 #[derive(StructOpt, Debug)]
@@ -366,13 +366,39 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
                     .into(),
             );
         }
-        if changed_since.len() != 0 {
+        if changed_since.as_ref().map_or(false, |git_ref| !git_ref.is_empty()) {
             return Err(
                 "-p/--packages is mutually exlusive to using -c/--changed-since"
                     .into(),
             );
         }
     }
+
+    if changed_since.as_ref().map_or(false, |git_ref| !git_ref.is_empty()) {
+        if !skip.is_empty() || !ignore_pre_version.is_empty() {
+            return Err(
+                "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
+                    .into(),
+            );
+        }
+
+    }
+
+    // Either use explicitly given --packages or calculate packages that were
+    // --changed-since a given Git reference.
+    let packages = match changed_since {
+        Some(git_ref) if !git_ref.is_empty() => {
+            let changed = util::changed_packages(ws, &git_ref)?;
+
+            if changed.len() == 0 {
+                return Err("No changes detected".into())
+            };
+
+            changed.iter().map(Package::name).collect()
+        }
+        _ => packages,
+    };
+
 
     let publish = move |p: &Package| {
         let publ = if ignore_publish {
@@ -384,21 +410,6 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
         };
         trace!("{:}.publish={}", p.name(), publ);
         publ
-    };
-
-    if changed_since.len() != 0 {
-        if !skip.is_empty() || !ignore_pre_version.is_empty() {
-            return Err(
-                "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
-                    .into(),
-            );
-        }
-
-    }
-
-    let changed = util::changed_packages(ws, &changed_since)?;
-    if changed.len() == 0 {
-        return Err("No changes detected".into())
     };
 
     if !packages.is_empty() {
