@@ -10,8 +10,11 @@ use std::{
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 use git2::Repository;
 
-pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Result<HashSet<Package>, String> {
-
+/// Calculate changed packages in a Cargo workspace since a Git `reference`.
+///
+/// This calculates changed files deltas between trees of HEAD and a given reference,
+/// whose file names are used to naively match to a changed package.
+pub fn changed_packages(ws: &Workspace, reference: &str) -> Result<HashSet<Package>, String> {
     ws.config()
         .shell()
         .status("Calculating", format!("git diff since {:}", reference))
@@ -36,7 +39,7 @@ pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Result<HashSe
 
     let files = diff
         .deltas()
-        .filter_map(|d| d.new_file().path().clone())
+        .filter_map(|d| d.new_file().path())
         .filter_map(|d| if d.is_file() { d.parent() } else { Some(d) })
         .map(|l| path.join(l))
         .collect::<Vec<_>>();
@@ -45,6 +48,12 @@ pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Result<HashSe
 
     let mut packages = HashSet::new();
 
+    // FIXME: Can this overspecify packages? E.g. if we have:
+    // 1. a_workspace/Cargo.toml
+    // 2. a_workspace/crate_a/Cargo.toml
+    // 3. a_workspace/crate_b/Cargo.toml
+    // then for a dirty `workspace/crate_a/file.rs we will mark *both* 1. and 2.
+    // package as dirty
     for m in members_deep(ws) {
         let root = m.root();
         for f in files.iter() {
