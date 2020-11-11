@@ -20,6 +20,8 @@ where
 {
     let mut graph = Graph::<Package, u8, Directed>::new();
 
+    // Collect all members that are selected with aim of being published or are
+    // in the changed package set
     let mut map = all_members
         .iter()
         .filter_map(|member| {
@@ -30,21 +32,24 @@ where
         })
         .collect::<HashMap<_, _>>();
 
+    // Create a dependency graph of the member packages collected above
     for member in all_members.iter() {
-        let current_index = match map.get(&member.name()) {
-            Some(i) => i,
-            _ => continue, // ignore entries we are not expected to publish
-        };
+        // ignore entries we are not expected to publish
+        let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
 
         for dep in member.dependencies() {
             if let Some(dep_index) = map.get(&dep.package_name()) {
-                graph.add_edge(*current_index, *dep_index, 0);
+                graph.add_edge(*member_index, *dep_index, 0);
             }
         }
     }
 
+    // Retain packages in the graph that are transitively dependent on a changed package,
+    // including themselves
     'members: for member in all_members.iter() {
+        // ignore entries we are not expected to publish
         let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
+
         for pkg in changed.iter() {
             if let Some(pkg_idx) = map.get(&pkg.name()) {
                 if petgraph::algo::has_path_connecting(&graph, *pkg_idx, *member_index, None) {
