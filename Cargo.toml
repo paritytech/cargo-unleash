@@ -34,6 +34,7 @@ cargo = "0.48.0"
 flate2 = "1.0.3"
 semver = "0.10.0"
 tar = "0.4.26"
+semverver = { git = "https://github.com/rust-lang/rust-semverver", optional = true }
 
 # Optional dependencies
 cargo-readme = { version="3.2", optional = true }

@@ -187,6 +187,7 @@ dependencies = [
  "petgraph",
  "regex",
  "semver",
+ "semverver",
  "sha1",
  "structopt",
  "tar",
@@ -1055,6 +1056,22 @@ name = "semver-parser"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
+
+[[package]]
+name = "semverver"
+version = "0.1.46"
+source = "git+https://github.com/rust-lang/rust-semverver#d5a68677ebb920b89d78f91c65ec1a343de0b3df"
+dependencies = [
+ "anyhow",
+ "cargo",
+ "crates-io",
+ "curl",
+ "env_logger",
+ "log",
+ "semver",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "serde"
