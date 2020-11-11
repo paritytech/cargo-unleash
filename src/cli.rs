@@ -55,8 +55,8 @@ pub struct PackageSelectOptions {
     pub ignore_pre_version: Vec<Identifier>,
     /// Ignore whether `publish` is set.
     ///
-    /// If nothing else is specified `publish = true` is assumed for every package. If publish
-    /// is set to false or any registry, it is ignore by default. If you want to include it
+    /// If nothing else is specified, `publish = true` is assumed for every package. If publish
+    /// is set to false or any registry, it is ignored by default. If you want to include it
     /// regardless, set this flag.
     #[structopt(long)]
     ignore_publish: bool,
@@ -357,15 +357,12 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package)
     }
 
     let publish = move |p: &Package| {
-        let publ = if ignore_publish {
-            true
-        } else if let Some(v) = p.publish() {
-            !v.is_empty()
-        } else {
-            true
-        };
-        trace!("{:}.publish={}", p.name(), publ);
-        publ
+        // If publish is set to false or any registry, it is ignored by default
+        // unless overriden.
+        let value = ignore_publish || p.publish().is_none();
+
+        trace!("{:}.publish={}", p.name(), value);
+        value
     };
 
     if !packages.is_empty() {
