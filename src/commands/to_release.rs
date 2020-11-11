@@ -23,11 +23,11 @@ where
     let mut graph = Graph::<Package, (), _, _>::new();
     let members = members_deep(ws);
 
-    let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(&m));
+    let (members, to_ignore): (Vec<_>, Vec<_>) = members.into_iter().partition(predicate);
 
     let ignored = to_ignore
-        .into_iter()
-        .map(|m| m.name())
+        .iter()
+        .map(Package::name)
         .collect::<HashSet<_>>();
 
     ws.config()
@@ -36,7 +36,6 @@ where
         .expect("Writing to Shell doesn't fail");
 
 
-    let mut already_published = HashSet::new();
     let mut registry = RegistrySource::remote(
         SourceId::crates_io(ws.config())
             .expect("Your main registry (usually crates.io) can't be read. Please check your .cargo/config"),
@@ -47,6 +46,8 @@ where
 
     registry.update().expect("Updating from remote registry failed :( .");
 
+    // Find out which packages are already published in our designated registry
+    let mut already_published = HashSet::new();
     for m in members.iter() {
         let dep = Dependency::parse_no_deprecated(m.name(), Some(&m.version().to_string()), registry.source_id())
             .expect("Parsing our dependency doesn't fail");
@@ -64,7 +65,7 @@ where
             if ignored.contains(&member.name()) || already_published.contains(&member.name()) {
                 return None;
             }
-            Some((member.name(), graph.add_node((*member).clone())))
+            Some((member.name(), graph.add_node(member.clone())))
         })
         .collect::<HashMap<_, _>>();
 
