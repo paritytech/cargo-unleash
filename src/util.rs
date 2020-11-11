@@ -1,14 +1,64 @@
 use cargo::{
     core::{package::Package, Workspace},
+    util::interning::InternedString,
     sources::PathSource,
 };
 use log::{warn, trace};
 use std::{
-    collections::HashSet,
+    collections::{HashSet, HashMap},
     error::Error, fs,
 };
 use toml_edit::{Document, InlineTable, Item, Table, Value};
+use petgraph::{Directed, Graph, graph::NodeIndex};
 use git2::Repository;
+
+/// Calculate the dependents graph
+pub fn changed_dependents<'a, F>(all_members: Vec<Package>, changed: &HashSet<Package>, predicate: F)
+    -> (Graph::<Package, u8, Directed, u32>, HashMap<InternedString, NodeIndex<u32>>)
+where
+    F: Fn(&Package) -> bool,
+{
+    let mut graph = Graph::<Package, u8, Directed>::new();
+
+    let mut map = all_members
+        .iter()
+        .filter_map(|member| {
+            if !predicate(&member) && !changed.contains(member) {
+                return None;
+            }
+            Some((member.name(), graph.add_node(member.clone())))
+        })
+        .collect::<HashMap<_, _>>();
+
+    for member in all_members.iter() {
+        let current_index = match map.get(&member.name()) {
+            Some(i) => i,
+            _ => continue, // ignore entries we are not expected to publish
+        };
+
+        for dep in member.dependencies() {
+            if let Some(dep_index) = map.get(&dep.package_name()) {
+                graph.add_edge(*current_index, *dep_index, 0);
+            }
+        }
+    }
+
+    'members: for member in all_members.iter() {
+        let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
+        for pkg in changed.iter() {
+            if let Some(pkg_idx) = map.get(&pkg.name()) {
+                if petgraph::algo::has_path_connecting(&graph, *pkg_idx, *member_index, None) {
+                    continue 'members;
+                }
+            }
+        }
+        // we didn't continue, so no match was found. remove
+        graph.remove_node(*member_index);
+        map.remove(&member.name());
+    }
+
+    (graph, map)
+}
 
 /// Calculate changed packages in a Cargo workspace since a Git `reference`.
 ///
