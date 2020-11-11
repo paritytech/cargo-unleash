@@ -24,16 +24,12 @@ where
     // in the changed package set
     let mut map = all_members
         .iter()
-        .filter_map(|member| {
-            if !predicate(&member) && !changed.contains(member) {
-                return None;
-            }
-            Some((member.name(), graph.add_node(member.clone())))
-        })
+        .filter(|member| predicate(&member) || changed.contains(member))
+        .map(|member| (member.name(), graph.add_node(member.clone())))
         .collect::<HashMap<_, _>>();
 
     // Create a dependency graph of the member packages collected above
-    for member in all_members.iter() {
+    for member in &all_members {
         // ignore entries we are not expected to publish
         let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
 
@@ -46,20 +42,19 @@ where
 
     // Retain packages in the graph that are transitively dependent on a changed package,
     // including themselves
-    'members: for member in all_members.iter() {
+    for member in all_members {
         // ignore entries we are not expected to publish
         let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
 
-        for pkg in changed.iter() {
-            if let Some(pkg_idx) = map.get(&pkg.name()) {
-                if petgraph::algo::has_path_connecting(&graph, *pkg_idx, *member_index, None) {
-                    continue 'members;
-                }
-            }
+        if changed.iter().filter_map(|c| map.get(&c.name())).any(|changed_idx| {
+            petgraph::algo::has_path_connecting(&graph, *changed_idx, *member_index, None)
+        }) {
+            // Retain the package, as a package in `changed` transitively depends on it
+        } else {
+            // ...otherwise remove it
+            graph.remove_node(*member_index);
+            map.remove(&member.name());
         }
-        // we didn't continue, so no match was found. remove
-        graph.remove_node(*member_index);
-        map.remove(&member.name());
     }
 
     (graph, map)
