@@ -2,6 +2,7 @@ use std::error::Error;
 use structopt::StructOpt;
 mod cli;
 mod commands;
+mod semverver;
 mod util;
 
 use cli::Opt;

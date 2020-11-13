@@ -188,6 +188,8 @@ dependencies = [
  "regex",
  "semver",
  "semverver",
+ "serde",
+ "serde_json",
  "sha1",
  "structopt",
  "tar",

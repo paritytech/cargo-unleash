@@ -287,6 +287,12 @@ pub enum Command {
         readme_mode: GenerateReadmeMode,
         // add template, dry-run
     },
+    /// TODO: Perform semver breakage analysis
+    #[cfg(feature = "semverver")]
+    Semverver {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+    },
     /// Unleash 'em dragons
     ///
     /// Package all selected crates, check them and attempt to publish them.
@@ -751,6 +757,23 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let packages = commands::packages_to_release(&ws, predicate)?;
 
             commands::gen_all_readme(packages, &ws, readme_mode)
+        }
+        #[cfg(feature = "semverver")]
+        Command::Semverver {
+            pkg_opts,
+        } => {
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            maybe_patch(false, &predicate)?;
+
+            let packages = commands::packages_to_release(&ws, predicate)?;
+
+            let analysis = crate::semverver::run_semver_analysis(&ws, packages.iter())?;
+            dbg!(analysis);
+
+            Ok(())
         }
         Command::EmDragons {
             dry_run,

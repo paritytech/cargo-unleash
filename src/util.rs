@@ -12,7 +12,7 @@ use toml_edit::{Document, InlineTable, Item, Table, Value};
 use petgraph::{Directed, Graph, graph::NodeIndex};
 use git2::Repository;
 
-/// Calculate the dependents graph
+/// Calculate the dependency graph of packages that transitively depend on `changed` packages
 pub fn changed_dependents<'a, F>(all_members: Vec<Package>, changed: &HashSet<Package>, predicate: F)
     -> (Graph::<Package, u8, Directed, u32>, HashMap<InternedString, NodeIndex<u32>>)
 where
