@@ -58,7 +58,7 @@ pub fn with_deactivated_dev_dependencies<'a, I, F, A>(iter: I, fun: F)
     -> Result<A, Box<dyn Error>>
 where
     I: Iterator<Item = &'a Package>,
-    F: Fn() -> Result<A, Box<dyn Error>>,
+    F: FnOnce() -> Result<A, Box<dyn Error>>,
 {
 
     let edited = edit_each(iter, |p, doc| {

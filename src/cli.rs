@@ -407,6 +407,30 @@ fn verify_readme_feature() -> Result<(), String> {
     }
 }
 
+pub fn with_patched<'a, F, A>(
+    root_manifest: &PathBuf,
+    config: &CargoConfig,
+    predicate: &dyn Fn(&Package) -> bool,
+    fun: F
+)
+    -> Result<A, Box<dyn Error>>
+where
+    F: FnOnce() -> Result<A, Box<dyn Error>>,
+{
+
+    config.shell()
+        .status("Preparing", "Disabling Dev Dependencies")?;
+
+    let ws = Workspace::new(root_manifest, config)
+        .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+    crate::util::with_deactivated_dev_dependencies(
+        ws.members()
+            .filter(|p| predicate(p) && config.shell().status("Patching", p.name()).is_ok()),
+        fun
+    )
+}
+
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     let _ = Logger::with_str(args.log.clone()).start();
     let c = CargoConfig::default().expect("Couldn't create cargo config");
@@ -422,22 +446,6 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             path = path.join("Cargo.toml")
         }
         fs::canonicalize(path)?
-    };
-
-    let maybe_patch = |shouldnt_patch, predicate: &dyn Fn(&Package) -> bool| {
-        if shouldnt_patch {
-            return Ok(());
-        }
-
-        c.shell()
-            .status("Preparing", "Disabling Dev Dependencies")?;
-
-        let ws = Workspace::new(&root_manifest, &c)
-            .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-        commands::deactivate_dev_dependencies(
-            ws.members()
-                .filter(|p| predicate(p) && c.shell().status("Patching", p.name()).is_ok()),
-        )
     };
 
     match args.cmd {
@@ -651,27 +659,47 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Command::DeDevDeps { pkg_opts } => maybe_patch(false, &make_pkg_predicate(pkg_opts)?),
+        Command::DeDevDeps { pkg_opts } => {
+            let predicate = make_pkg_predicate(pkg_opts)?;
+
+            c.shell()
+                .status("Preparing", "Disabling Dev Dependencies")?;
+
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+            crate::util::with_deactivated_dev_dependencies(
+                ws.members()
+                    .filter(|p| predicate(p) && c.shell().status("Patching", p.name()).is_ok()),
+            || { Ok(()) }
+            )
+        }
         Command::ToRelease {
             include_dev,
             pkg_opts,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
+            let inner = || {
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let packages = commands::packages_to_release(&ws, predicate)?;
-            println!(
-                "{:}",
-                packages
-                    .iter()
-                    .map(|p| format!("{} ({})", p.name(), p.version()))
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            );
+                let ws = Workspace::new(&root_manifest, &c)
+                    .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+                let packages = commands::packages_to_release(&ws, &predicate)?;
+                println!(
+                    "{:}",
+                    packages
+                        .iter()
+                        .map(|p| format!("{} ({})", p.name(), p.version()))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                );
+                Ok(())
+            };
 
-            Ok(())
+            if include_dev {
+                inner()
+            } else {
+                with_patched(&root_manifest, &c, &predicate, inner)
+            }
         }
         Command::Check {
             include_dev,
@@ -684,13 +712,20 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             }
 
             let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
+            let inner = || {
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let packages = commands::packages_to_release(&ws, predicate)?;
+                let ws = Workspace::new(&root_manifest, &c)
+                    .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+                let packages = commands::packages_to_release(&ws, &predicate)?;
 
-            commands::check(&packages, &ws, build, check_readme)
+                commands::check(&packages, &ws, build, check_readme)
+            };
+
+            if include_dev {
+                inner()
+            } else {
+                with_patched(&root_manifest, &c, &predicate, inner)
+            }
         }
         #[cfg(feature = "gen-readme")]
         Command::GenReadme {
@@ -698,13 +733,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             readme_mode,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(false, &predicate)?;
+            with_patched(&root_manifest, &c, &predicate, || {
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            let packages = commands::packages_to_release(&ws, predicate)?;
+                let ws = Workspace::new(&root_manifest, &c)
+                    .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+                let packages = commands::packages_to_release(&ws, predicate)?;
 
-            commands::gen_all_readme(packages, &ws, readme_mode)
+                commands::gen_all_readme(packages, &ws, readme_mode)
+            })
         }
         Command::EmDragons {
             dry_run,
@@ -717,31 +753,38 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             check_readme,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
+            let inner = || {
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+                let ws = Workspace::new(&root_manifest, &c)
+                    .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
 
-            let packages = commands::packages_to_release(&ws, predicate)?;
+                let packages = commands::packages_to_release(&ws, &predicate)?;
 
-            if !no_check {
-                if check_readme {
-                    verify_readme_feature()?;
+                if !no_check {
+                    if check_readme {
+                        verify_readme_feature()?;
+                    }
+
+                    commands::check(&packages, &ws, build, check_readme)?;
                 }
 
-                commands::check(&packages, &ws, build, check_readme)?;
+                ws.config().shell().status(
+                    "Releasing",
+                    &packages
+                        .iter()
+                        .map(|p| format!("{} ({})", p.name(), p.version()))
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                )?;
+
+                commands::release(packages, ws, dry_run, token, add_owner)
+            };
+
+            if include_dev {
+                inner()
+            } else {
+                with_patched(&root_manifest, &c, &predicate, inner)
             }
-
-            ws.config().shell().status(
-                "Releasing",
-                &packages
-                    .iter()
-                    .map(|p| format!("{} ({})", p.name(), p.version()))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-            )?;
-
-            commands::release(packages, ws, dry_run, token, add_owner)
         }
     }
 }

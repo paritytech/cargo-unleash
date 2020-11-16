@@ -1,7 +1,6 @@
 mod add_owner;
 mod check;
 mod clean_deps;
-mod de_dev_deps;
 mod release;
 mod rename;
 mod set_field;
@@ -11,7 +10,6 @@ mod version;
 pub use add_owner::add_owner;
 pub use check::check;
 pub use clean_deps::clean_up_unused_dependencies;
-pub use de_dev_deps::deactivate_dev_dependencies;
 pub use release::release;
 pub use rename::rename;
 pub use set_field::set_field;
