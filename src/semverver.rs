@@ -124,11 +124,16 @@ pub fn run_semver_analysis<'a>(
 
     // 2. Topologically sort the graph (we need to process all dependencies
     // first in order to process a dependent only once)
-    let topo = petgraph::algo::toposort(&graph, None).map_err(|cycle| {
+    let mut topo = petgraph::algo::toposort(&graph, None).map_err(|cycle| {
         log::warn!("Cycle encountered, did you disable dev-dependencies?");
         // Recreate the cycle ourselves for a better error message
         recreate_cycle(&graph, cycle.node_id())
     })?;
+    topo.reverse();
+    log::trace!(
+        "About to process packages in this order: {:#?}",
+        topo.iter().map(|idx| graph[*idx].name()).collect::<Vec<_>>(),
+    );
 
     // 3. Mark all changed packages for semantic analysis
     #[derive(Clone, Copy, Debug)]
