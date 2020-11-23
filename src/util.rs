@@ -34,7 +34,7 @@ where
 
     // Collect all members that are selected with aim of being published or are
     // in the changed package set
-    let mut map = all_members
+    let map = all_members
         .iter()
         .filter(|member| predicate(&member) || changed.contains(member))
         .map(|member| (member.name(), graph.add_node(member.clone())))
@@ -62,22 +62,29 @@ where
         let _ = std::write!(file, "{}", petgraph::dot::Dot::new(&graph));
     }
 
-    // Retain packages in the graph that are transitively dependent on a changed package,
-    // including themselves
-    for member in all_members {
-        // ignore entries we are not expected to publish
-        let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
+    // Retain packages in the graph that are transitively dependent on
+    // a changed package, including themselves
+    let mut transitively_dependent = HashSet::new();
 
-        if changed.iter().filter_map(|c| map.get(&c.name())).any(|changed_idx| {
-            petgraph::algo::has_path_connecting(&graph, *changed_idx, *member_index, None)
-        }) {
-            // Retain the package, as a package in `changed` transitively depends on it
-        } else {
-            // ...otherwise remove it
-            graph.remove_node(*member_index);
-            map.remove(&member.name());
+    let mut visited = HashSet::new();
+    let mut stack: Vec<_> = changed.iter().filter_map(|x| map.get(&x.name()).copied()).collect();
+    while let Some(idx) = stack.pop() {
+        visited.insert(idx);
+        for idx in graph.neighbors_directed(idx, petgraph::Direction::Incoming) {
+            if visited.insert(idx) {
+                stack.push(idx);
+            }
         }
+        transitively_dependent.insert(idx);
     }
+
+    graph.retain_nodes(|_, idx| transitively_dependent.contains(&idx));
+    // Node indices were surely invalidated, so reconstruct the name -> idx map
+    let map = graph
+        .node_weights_mut()
+        .enumerate()
+        .map(|(idx, x)| (x.name(), NodeIndex::from(idx as u32)))
+        .collect();
 
     if log::log_enabled!(log::Level::Trace) {
         use std::io::Write;
