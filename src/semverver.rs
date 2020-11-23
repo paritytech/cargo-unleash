@@ -4,7 +4,6 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::path::Path;
 use std::env;
 use std::io;
 use std::sync::{Arc, RwLock};
@@ -160,14 +159,18 @@ pub fn run_semver_analysis<'a>(
             Requires::Nothing => continue,
             Requires::PatchBump => SemverBump::Patch,
             // FIXME: Cargo semver does not work correctly in a workspace setting
-            Requires::SemanticAnalysis => match cargo_semver(pkg.manifest_path()) {
-                // Until a crate doesn't define 1.0-level public API it's fine
-                // to only bump MINOR version
-                Ok(SemverBump::Major) if pkg.version().major == 0 => SemverBump::Minor,
-                Ok(bump) => bump,
-                Err(err) => {
-                    log::warn!("Error running cargo semver for `{}`: {}", pkg.name(), err);
-                    continue;
+            Requires::SemanticAnalysis => {
+                ws.config().shell().status("Analyzing", pkg.name())?;
+
+                match cargo_semver(&pkg) {
+                    // Until a crate doesn't define 1.0-level public API it's fine
+                    // to only bump MINOR version
+                    Ok(SemverBump::Major) if pkg.version().major == 0 => SemverBump::Minor,
+                    Ok(bump) => bump,
+                    Err(err) => {
+                        ws.config().shell().error(&err)?;
+                        continue;
+                    }
                 }
             },
         };
@@ -191,7 +194,6 @@ pub fn run_semver_analysis<'a>(
                 log::trace!("Skipping dependent `{}` as it seems its deps are compatible", rev_dep.name());
                 continue;
             }
-            log::trace!("Continuing with dependent `{}`", rev_dep.name());
             // Mark as needing at least a PATCH bump.
             // If we bumped MAJOR/MINOR, then mark it for semantic analysis.
             requires[rev_idx.index()] = match bump {
@@ -232,37 +234,63 @@ pub fn run_semver_analysis<'a>(
         }
     }
 
+    for entry in &analysis {
+        match entry {
+            Action::PackageVerBump { pkg, bump } => log::trace!("{} needs {:?}", pkg.name(), bump),
+            Action::DependencyReqBump { pkg, dep, req } =>
+                log::trace!("Dep {} of {} now needs its {:?} version", dep.package_name(), pkg.name(), req),
+        }
+    }
+
     Ok(analysis)
 }
 
 /// Runs `cargo semver` for a package defined in the manifest path.
-fn cargo_semver(manifest_path: impl AsRef<Path>) -> Result<SemverBump, Box<dyn Error>> {
-    let mut manifest_path = manifest_path.as_ref().to_owned();
+fn cargo_semver(pkg: &cargo::core::Package) -> Result<SemverBump, Box<dyn Error>> {
+    let mut manifest_path = pkg.manifest_path().to_owned();
     manifest_path.pop();
 
     let mut cmd = Command::new("cargo");
     cmd.arg("semver");
-    log::debug!("Running cargo semver in {}", manifest_path.display());
-    cmd.current_dir(manifest_path);
+    cmd.arg("--json");
+    cmd.current_dir(&manifest_path);
 
     let output = cmd.output()?;
 
-    // TODO: Handle cargo semver signalling patch-level deps
-    Ok(if output.status.success() {
-        // FIXME: Make sure it's only PATCH-level
-        SemverBump::Patch
-    } else {
-        let stderr = std::str::from_utf8(&output.stderr)?;
-        eprintln!("{}", &stderr);
-        if stderr.contains("thread 'rustc' panicked at") {
-            return Err(stderr.into());
-        } else if let Some(idx) = stderr.find("could not compile `") {
-            let newline = stderr[idx..].find('\n').unwrap_or(stderr.len());
-            return Err(stderr[idx..][..newline].into());
-        } else {
-            SemverBump::Major
+    #[derive(serde::Deserialize)]
+    struct SemverOutput {
+        old_version: semver::Version,
+        new_version: semver::Version,
+    }
+
+    match (output.status.success(), serde_json::from_slice(&output.stdout)) {
+        (true, Ok(SemverOutput { old_version, new_version })) => {
+            let bump = if new_version.major > old_version.major {
+                SemverBump::Major
+            } else if new_version.minor > old_version.minor {
+                SemverBump::Minor
+            } else if new_version.patch > old_version.patch {
+                SemverBump::Patch
+            } else {
+                return Err(format!("semverver didn't detect any change for `{}`", pkg.name()).into());
+            };
+            log::debug!("semverver wants `{}` to bump {:?}", pkg.name(), bump);
+
+            Ok(bump)
+        },
+        _ => {
+            let stderr = std::str::from_utf8(&output.stderr)?;
+
+            let msg = stderr.lines().rev().filter_map(|line| line.strip_prefix("error: ")).next();
+            let msg = msg.or(stderr.lines().last()).unwrap_or(stderr);
+
+            if stderr.contains("thread 'rustc' panicked at") {
+                log::warn!("{}", stderr);
+            }
+
+            return Err(msg.into());
         }
-    })
+    }
 }
 
 
