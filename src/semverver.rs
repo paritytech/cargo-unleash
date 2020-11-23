@@ -284,9 +284,7 @@ fn cargo_semver(pkg: &cargo::core::Package) -> Result<SemverBump, Box<dyn Error>
             let msg = stderr.lines().rev().filter_map(|line| line.strip_prefix("error: ")).next();
             let msg = msg.or(stderr.lines().last()).unwrap_or(stderr);
 
-            if stderr.contains("thread 'rustc' panicked at") {
-                log::warn!("{}", stderr);
-            }
+            log::warn!("{}", stderr);
 
             return Err(msg.into());
         }
