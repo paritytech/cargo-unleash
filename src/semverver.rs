@@ -1,5 +1,8 @@
 //! Utilities related to running `semverver` analysis.
 
+#![allow(dead_code)]
+
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::path::Path;
 use std::env;
@@ -38,7 +41,7 @@ pub fn run_semver_analysis<'a>(
 #[cfg(feature = "semverver")]
 pub fn run_semver_analysis<'a>(
     ws: &Workspace,
-    pkgs: impl Iterator<Item = &'a Package>,
+    predicate: impl Fn(&Package) -> bool,
 ) -> Result<Vec<Action>, Box<dyn Error>> {
     // The algorithm below, given a local Cargo workspace its changed packages,
     // analyzes which packages may need a MAJOR, MINOR or PATCH semver version
@@ -104,15 +107,28 @@ pub fn run_semver_analysis<'a>(
 
     // 1. Narrow down dependency graph to transitive dependents of changed
     // packages, including themselves (others are not impacted)
-    let changed = pkgs.cloned().collect();
+
     let pkgs = crate::util::members_deep(ws);
-    let (mut graph, map) = crate::util::changed_dependents(pkgs, &changed, |_p| true);
+
+    // FIXME: Temporarily assume that packages for which predicate is true are
+    // the "root" changed ones
+    let changed = pkgs.clone().into_iter().filter(predicate).collect();
+    // NOTE: We use always true predicate to select the entire graph - even if
+    // we changed a couple of packages, we need to analyze the entire transitive
+    // graph for semver-compat (even if we won't publish the dependents)
+    // FIXME: Provide a better way to process only non-dev deps
+    let (mut graph, map) = crate::util::changed_dependents(pkgs, &changed, false, |_| true);
+
+    log::debug!("Changed packages: {}", changed.len());
+    log::debug!("Changed transitive dependents: {}", graph.node_count());
 
     // 2. Topologically sort the graph (we need to process all dependencies
     // first in order to process a dependent only once)
-    let topo = petgraph::algo::toposort(&graph, None)
-        .map_err(|c| format!("Cycle detected: {:?}", c))?;
-    log::trace!("Topographically sorted: {:?}", &topo);
+    let topo = petgraph::algo::toposort(&graph, None).map_err(|cycle| {
+        log::warn!("Cycle encountered, did you disable dev-dependencies?");
+        // Recreate the cycle ourselves for a better error message
+        recreate_cycle(&graph, cycle.node_id())
+    })?;
 
     // 3. Mark all changed packages for semantic analysis
     #[derive(Clone, Copy, Debug)]
@@ -242,6 +258,63 @@ fn cargo_semver(manifest_path: impl AsRef<Path>) -> Result<SemverBump, Box<dyn E
             SemverBump::Major
         }
     })
+}
+
+
+fn recreate_cycle(
+    graph: &petgraph::Graph<Package, crate::util::DepKindFmt, petgraph::Directed>,
+    cycle_root: petgraph::graph::NodeIndex,
+) -> String {
+    // FIXME: Replace with petgraph's DFS
+    use petgraph::visit::EdgeRef;
+    use petgraph::graph::NodeIndex;
+    use cargo::core::dependency::DepKind;
+
+    let mut path = Vec::new();
+    let mut stack = Vec::new();
+    let mut processing = HashSet::new();
+
+    enum Action {
+        Enter { node: NodeIndex },
+        VisitEdge { target: NodeIndex, kind: DepKind },
+    }
+
+    stack.push(Action::Enter { node: cycle_root });
+    for edge in graph.edges_directed(cycle_root, Direction::Outgoing) {
+        stack.push(Action::VisitEdge { target: edge.target(), kind: edge.weight().0 });
+    }
+
+    while let Some(action) = stack.pop() {
+        let (cur, kind) = match action {
+            Action::Enter { node } => {
+                path.pop();
+                processing.remove(&node);
+                continue;
+            },
+            Action::VisitEdge { target, kind } => (target, kind),
+        };
+
+        stack.push(Action::Enter { node: cur });
+        path.push((cur, kind));
+
+        if !processing.insert(cur) {
+            let backtrace = path.iter().skip_while(|(dst, _)| *dst != cur).skip(1);
+            eprintln!("{}...", graph[cur].name());
+            for (dst, kind) in backtrace {
+                eprintln!("... depends on {} ({:?})", graph[*dst].name(), kind);
+            }
+
+            return format!("Cycle detected: {}", graph[cur].name());
+        } else {
+            for edge in graph.edges_directed(cur, Direction::Outgoing) {
+                stack.push(Action::VisitEdge {
+                    target: edge.target(),
+                    kind: edge.weight().0,
+                });
+            }
+        }
+    }
+    unreachable!()
 }
 
 // FIXME: Use in-process execution with functions below

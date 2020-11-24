@@ -1,5 +1,5 @@
 use cargo::{
-    core::{package::Package, Workspace},
+    core::{dependency::DepKind, package::Package, Workspace},
     util::interning::InternedString,
     sources::PathSource,
 };
@@ -12,13 +12,25 @@ use toml_edit::{Document, InlineTable, Item, Table, Value};
 use petgraph::{Directed, Graph, graph::NodeIndex};
 use git2::Repository;
 
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct DepKindFmt(pub cargo::core::dependency::DepKind);
+impl std::fmt::Display for DepKindFmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.0 {
+            DepKind::Build => "build",
+            DepKind::Development => "dev",
+            DepKind::Normal => "regular",
+        }.fmt(f)
+    }
+}
+
 /// Calculate the dependency graph of packages that transitively depend on `changed` packages
-pub fn changed_dependents<'a, F>(all_members: Vec<Package>, changed: &HashSet<Package>, predicate: F)
-    -> (Graph::<Package, u8, Directed, u32>, HashMap<InternedString, NodeIndex<u32>>)
+pub fn changed_dependents<'a, F>(all_members: Vec<Package>, changed: &HashSet<Package>, with_dev: bool, predicate: F)
+    -> (Graph::<Package, DepKindFmt, Directed, u32>, HashMap<InternedString, NodeIndex<u32>>)
 where
     F: Fn(&Package) -> bool,
 {
-    let mut graph = Graph::<Package, u8, Directed>::new();
+    let mut graph = Graph::new();
 
     // Collect all members that are selected with aim of being published or are
     // in the changed package set
@@ -35,9 +47,19 @@ where
 
         for dep in member.dependencies() {
             if let Some(dep_index) = map.get(&dep.package_name()) {
-                graph.add_edge(*member_index, *dep_index, 0);
+                // FIXME: Provide a nicer way to collect different deps
+                if with_dev || dep.kind() != DepKind::Development {
+                    graph.add_edge(*member_index, *dep_index, DepKindFmt(dep.kind()));
+                }
             }
         }
+    }
+
+    log::debug!("Initial graph: {}", graph.node_count());
+    if log::log_enabled!(log::Level::Trace) {
+        use std::io::Write;
+        let mut file = fs::File::create("dependents.before.dot").unwrap();
+        let _ = std::write!(file, "{}", petgraph::dot::Dot::new(&graph));
     }
 
     // Retain packages in the graph that are transitively dependent on a changed package,
@@ -55,6 +77,12 @@ where
             graph.remove_node(*member_index);
             map.remove(&member.name());
         }
+    }
+
+    if log::log_enabled!(log::Level::Trace) {
+        use std::io::Write;
+        let mut file = fs::File::create("dependents.after.dot").unwrap();
+        let _ = std::write!(file, "{}", petgraph::dot::Dot::new(&graph));
     }
 
     (graph, map)

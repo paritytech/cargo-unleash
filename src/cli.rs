@@ -766,11 +766,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
 
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            // FIXME: We don't have to patch our deps, analysis pass below can
+            // do it for us
+            // Also this only patches select few, we might need to patch other
+            // packages across the workspace to avoid cycles (semver pass needs
+            // to run on the entire graph, not only publishable packages)
             maybe_patch(false, &predicate)?;
 
-            let packages = commands::packages_to_release(&ws, predicate)?;
-
-            let analysis = crate::semverver::run_semver_analysis(&ws, packages.iter())?;
+            let analysis = crate::semverver::run_semver_analysis(&ws, predicate)?;
             dbg!(analysis);
 
             Ok(())
