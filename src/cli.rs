@@ -404,7 +404,7 @@ fn verify_readme_feature() -> Result<(), String> {
 }
 
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
-    let _ = Logger::with_str(args.log.clone()).start();
+    let _ = Logger::with_env_or_str(args.log.clone()).start();
     let c = CargoConfig::default().expect("Couldn't create cargo config");
     c.shell().set_verbosity(if args.verbose {
         Verbosity::Verbose
