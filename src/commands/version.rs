@@ -5,9 +5,9 @@ use semver::{Version, VersionReq};
 use std::{collections::HashMap, error::Error};
 use toml_edit::{decorated, Item, Value};
 
-fn check_for_update<'a>(
+fn check_for_update(
     name: String,
-    wrap: DependencyEntry<'a>,
+    wrap: DependencyEntry<'_>,
     updates: &HashMap<String, Version>,
     force_update: bool,
 ) -> DependencyAction {
@@ -82,8 +82,8 @@ fn check_for_update<'a>(
 
 /// For packages matching predicate set to mapper given version, if any. Update all members dependencies
 /// if necessary.
-pub fn set_version<'a, M, P>(
-    ws: &Workspace<'a>,
+pub fn set_version<M, P>(
+    ws: &Workspace<'_>,
     predicate: P,
     mapper: M,
     force_update: bool,

@@ -4,8 +4,8 @@ use cargo::core::{package::Package, Workspace};
 use std::{error::Error, process::Command};
 // use toml_edit::{decorated, Item, Value};
 
-pub fn clean_up_unused_dependencies<'a, P>(
-    ws: &Workspace<'a>,
+pub fn clean_up_unused_dependencies<P>(
+    ws: &Workspace<'_>,
     predicate: P,
     check_only: bool,
 ) -> Result<(), Box<dyn Error>>
