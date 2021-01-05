@@ -20,13 +20,11 @@ jobs:
 
       - name: Run cargo check
         uses: actions-rs/cargo@v1
-        continue-on-error: true  # WARNING: only for this example, remove it!
         with:
           command: check
-      
+
       - name: Run cargo check (features=gen-readme)
         uses: actions-rs/cargo@v1
-        continue-on-error: true  # WARNING: only for this example, remove it!
         with:
           command: check
           args:  --features=gen-readme
@@ -47,7 +45,6 @@ jobs:
 
       - name: Run cargo test
         uses: actions-rs/cargo@v1
-        continue-on-error: true  # WARNING: only for this example, remove it!
         with:
           command: test
 

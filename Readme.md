@@ -2,11 +2,15 @@
 
 `cargo` release automation tooling for _massiv mono-repo_. Developed primarily for [Parity Substrate](https://github.com/paritytech/substrate).
 
+## Changes
+
+see [Changelog.md](./Changelog.md)
+
 ## Installation
 
 Use `cargo install` to install:
 ```bash
-cargo install cargo-unleash --version 1.0.0-alpha.9
+cargo install cargo-unleash --version 1.0.0-alpha.11
 ```
 
 ## Usage
@@ -22,30 +26,30 @@ There are more options available on the CLI, just run with `--help`:
 
 ```bash
 
-cargo-unleash 1.0.0-alpha.9
+cargo-unleash 1.0.0-alpha.11
 Release the crates of this massiv monorepo
 
 USAGE:
     cargo-unleash [FLAGS] [OPTIONS] <SUBCOMMAND>
 
 FLAGS:
-    -h, --help       
+    -h, --help
             Prints help information
 
-    -V, --version    
+    -V, --version
             Prints version information
 
-    -v, --verbose    
+    -v, --verbose
             Show verbose cargo output
 
 
 OPTIONS:
-    -l, --log <log>                        
+    -l, --log <log>
             Specify the log levels [default: warn]
 
-    -m, --manifest-path <manifest-path>    
+    -m, --manifest-path <manifest-path>
             The path to workspace manifest
-            
+
             Can either be the folder if the file is named `Cargo.toml` or the path to the specific `.toml`-manifest to
             load as the cargo workspace. [default: ./]
 
@@ -76,52 +80,52 @@ USAGE:
     cargo-unleash em-dragons [FLAGS] [OPTIONS]
 
 FLAGS:
-        --build               
+        --build
             Actually build the package in check
-            
+
             By default, this only runs `cargo check` against the package build. Set this flag to have it run an actual
             `build` instead.
-        --dry-run             
+        --dry-run
             dry run
 
-    -h, --help                
+    -h, --help
             Prints help information
 
-        --ignore-publish      
+        --ignore-publish
             Ignore whether `publish` is set.
-            
+
             If nothing else is specified `publish = true` is assumed for every package. If publish is set to false or
             any registry, it is ignore by default. If you want to include it regardless, set this flag.
-        --include-dev-deps    
+        --include-dev-deps
             Do not disable dev-dependencies
-            
+
             By default we disable dev-dependencies before the run.
-        --no-check            
+        --no-check
             dry run
 
-    -V, --version             
+    -V, --version
             Prints version information
 
 
 OPTIONS:
-        --owner <add-owner>                             
+        --owner <add-owner>
             Ensure we have the owner set as well
 
-    -i, --ignore-pre-version <ignore-pre-version>...    
+    -i, --ignore-pre-version <ignore-pre-version>...
             Ignore version pre-releases
-            
+
             Skip if the SemVer pre-release field is any of the listed. Mutually exclusive with `--package`
-    -p, --packages <packages>...                        
+    -p, --packages <packages>...
             Only use the specfic set of packages
-            
+
             Apply only to the packages named as defined. This is mutually exclusive with skip and ignore-version-pre.
             Default: []
-    -s, --skip <skip>...                                
+    -s, --skip <skip>...
             skip the package names matching ...
-            
+
             Provide one or many regular expression that, if the package name matches, means we skip that package.
             Mutually exclusive with `--package`
-        --token <token>                                 
+        --token <token>
              [env: CRATES_TOKEN]
 
 ```
