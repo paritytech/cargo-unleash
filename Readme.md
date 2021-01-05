@@ -2,6 +2,10 @@
 
 `cargo` release automation tooling for _massiv mono-repo_. Developed primarily for [Parity Substrate](https://github.com/paritytech/substrate).
 
+## Changes
+
+see [Changelog.md](./Changelog.md)
+
 ## Installation
 
 Use `cargo install` to install:
