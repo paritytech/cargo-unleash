@@ -38,11 +38,41 @@ where
     for pkg in iter {
         let manifest_path = pkg.manifest_path();
         let content = fs::read_to_string(manifest_path)?;
-        let mut doc: Document = content.parse()?;
-        results.push(f(pkg, &mut doc)?);
-        fs::write(manifest_path, doc.to_string())?;
+        let mut doc: Document = content
+            .parse()
+            .map_err(|e| format!("Parsing {:?} failed: {:}", manifest_path, e))?;
+        let res = f(pkg, &mut doc)?;
+        let new_doc = doc.to_string();
+        if content != new_doc {
+            fs::write(format!("{:?}.bak", manifest_path), content)?;
+            fs::write(manifest_path, new_doc)?;
+            results.push(res);
+        }
     }
     Ok(results)
+}
+
+
+/// Deactivate the Dev Dependencies Section of the given toml
+pub fn with_deactivated_dev_dependencies<'a, I, F, A>(iter: I, fun: F)
+    -> Result<A, Box<dyn Error>>
+where
+    I: Iterator<Item = &'a Package>,
+    F: FnOnce() -> Result<A, Box<dyn Error>>,
+{
+
+    let edited = edit_each(iter, |p, doc| {
+        doc.as_table_mut().remove("dev-dependencies");
+        Ok(p.manifest_path())
+    })?;
+    let res =  fun();
+    if res.is_err(){
+        // revert dev-deps
+        for path in edited {
+            fs::rename(format!("{:?}.bak", path), path)?;
+        }
+    }
+    res
 }
 
 /// Wrap each the different dependency as a mutable item

@@ -10,7 +10,7 @@ use petgraph::Graph;
 use std::collections::{HashMap, HashSet};
 
 /// Generate the packages we should be releasing
-pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: F) -> Result<Vec<Package>, String>
+pub fn packages_to_release<'a, F>(ws: &Workspace<'a>, predicate: &F) -> Result<Vec<Package>, String>
 where
     F: Fn(&Package) -> bool,
 {
