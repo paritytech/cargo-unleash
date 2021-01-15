@@ -4,9 +4,9 @@ use log::trace;
 use std::{collections::HashMap, error::Error};
 use toml_edit::{decorated, Item, Value};
 
-fn check_for_update<'a>(
+fn check_for_update(
     name: String,
-    wrap: DependencyEntry<'a>,
+    wrap: DependencyEntry<'_>,
     updates: &HashMap<String, String>,
 ) -> DependencyAction {
     let new_name = if let Some(v) = updates.get(&name) {
@@ -43,7 +43,7 @@ fn check_for_update<'a>(
 
 /// For packages matching predicate set to mapper given version, if any. Update all members dependencies
 /// if necessary.
-pub fn rename<'a, M, P>(ws: &Workspace<'a>, predicate: P, mapper: M) -> Result<(), Box<dyn Error>>
+pub fn rename<M, P>(ws: &Workspace<'_>, predicate: P, mapper: M) -> Result<(), Box<dyn Error>>
 where
     P: Fn(&Package) -> bool,
     M: Fn(&Package) -> Option<String>,

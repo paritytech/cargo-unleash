@@ -6,9 +6,9 @@ use cargo::{
 use std::error::Error;
 use std::{thread, time::Duration};
 
-pub fn release<'a>(
+pub fn release(
     packages: Vec<Package>,
-    ws: Workspace<'a>,
+    ws: Workspace<'_>,
     dry_run: bool,
     token: Option<String>,
     owner: Option<String>,

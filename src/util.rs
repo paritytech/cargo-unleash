@@ -6,7 +6,7 @@ use log::warn;
 use std::{error::Error, fs};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 
-pub fn members_deep<'a>(ws: &'a Workspace) -> Vec<Package> {
+pub fn members_deep(ws: &'_ Workspace) -> Vec<Package> {
     let mut total_list = Vec::new();
     for m in ws.members() {
         total_list.push(m.clone());

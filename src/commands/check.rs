@@ -154,7 +154,7 @@ fn check_dependencies(package: &Package) -> Result<(), String> {
         .filter(|d| d.source_id().is_git() && d.version_req() == &VersionReq::any())
         .map(|d| format!("{:}", d.package_name()))
         .collect::<Vec<_>>();
-    if git_deps.len() > 0 {
+    if !git_deps.is_empty() {
         Err(git_deps.join(", "))
     } else {
         Ok(())
@@ -179,7 +179,7 @@ fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
         _ => {}
     }
     match (metadata.license.as_ref(), metadata.license_file.as_ref()) {
-        (Some(ref s), None) | (None, Some(ref s)) if s.len() > 0 => {}
+        (Some(ref s), None) | (None, Some(ref s)) if !s.is_empty() => {}
         (Some(_), Some(_)) => bad_fields.push("You can't have license AND license_file"),
         _ => bad_fields.push("Neither license nor license_file is provided"),
     }
@@ -256,7 +256,7 @@ pub fn check<'a>(
     });
 
     errors.iter().for_each(|s| error!("{:#?}", s));
-    if errors.len() > 0 {
+    if !errors.is_empty() {
         return Err(format!(
             "Soft checkes failed with {} errors (see above)",
             errors.len()
@@ -278,7 +278,7 @@ pub fn check<'a>(
         });
 
         errors.iter().for_each(|s| error!("{:#?}", s));
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             return Err(format!(
                 "{} readme file(s) need to be updated (see above).",
                 errors.len()
@@ -308,7 +308,7 @@ pub fn check<'a>(
     for e in errors.iter().filter_map(|res| res.as_ref().err()) {
         error!("{:#?}", e);
     }
-    if errors.len() > 0 {
+    if !errors.is_empty() {
         return Err(format!("Packing failed with {} errors (see above)", errors.len()).into());
     };
 
