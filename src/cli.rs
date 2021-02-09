@@ -71,6 +71,16 @@ pub enum VersionCommand {
         #[structopt(long)]
         force_update: bool,
     },
+    /// Smart bumping of crates for the next breaking release, bumps minor for 0.x and major for major > 1
+    BumpBreaking {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+        /// Force an update of dependencies
+        ///
+        /// Hard set to the new version, do not check whether the given one still matches
+        #[structopt(long)]
+        force_update: bool,
+    },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
     BumpPre {
         #[structopt(flatten)]
@@ -589,6 +599,27 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         force_update,
                     )
                 }
+                VersionCommand::BumpBreaking {
+                    pkg_opts,
+                    force_update,
+                } => {
+                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    commands::set_version(
+                        &ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            v.pre = Vec::new();
+                            if v.major == 0 {
+                                v.increment_minor();
+                            } else {
+                                v.increment_major();
+                            }
+                            Some(v)
+                        },
+                        force_update,
+                    )
+                },
                 VersionCommand::SetPre {
                     pre,
                     pkg_opts,
