@@ -619,7 +619,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         },
                         force_update,
                     )
-                },
+                }
                 VersionCommand::SetPre {
                     pre,
                     pkg_opts,
