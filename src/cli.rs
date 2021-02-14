@@ -399,6 +399,7 @@ fn verify_readme_feature() -> Result<(), String> {
 }
 
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
+    cargo::core::features::enable_nightly_features();
     let _ = Logger::with_str(args.log.clone()).start();
     let c = CargoConfig::default().expect("Couldn't create cargo config");
     c.shell().set_verbosity(if args.verbose {
