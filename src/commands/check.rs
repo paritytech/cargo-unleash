@@ -55,13 +55,13 @@ fn inject_replacement(
         .map_err(|e| format!("Could not write local manifest: {}", e).into())
 }
 
-fn run_check(
-    ws: &Workspace<'_>,
+fn run_check<'a>(
+    ws: &Workspace<'a>,
     tar: &FileLock,
     opts: &PackageOpts<'_>,
     build_mode: CompileMode,
     replace: &HashMap<String, String>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Workspace<'a>, Box<dyn Error>> {
     let config = ws.config();
     let pkg = ws.current()?;
 
@@ -144,7 +144,7 @@ fn run_check(
         .into());
     }
 
-    Ok(())
+    Ok(ws)
 }
 
 fn check_dependencies(package: &Package) -> Result<(), String> {
@@ -209,20 +209,6 @@ pub fn check<'a>(
     check_readme: bool,
 ) -> Result<(), Box<dyn Error>> {
     let c = ws.config();
-    let replaces = packages
-        .iter()
-        .map(|pkg| {
-            (
-                pkg.name().as_str().to_owned(),
-                pkg.manifest_path()
-                    .parent()
-                    .expect("Folder exists")
-                    .to_str()
-                    .expect("Is stringifiable")
-                    .to_owned(),
-            )
-        })
-        .collect::<HashMap<_, _>>();
 
     // FIXME: make build config configurable
     //        https://github.com/paritytech/cargo-unleash/issues/20
@@ -319,6 +305,11 @@ pub fn check<'a>(
     };
 
     c.shell().status("Checking", "Packages")?;
+
+
+
+    let mut replaces = HashMap::new();
+
     for (pkg_ws, rw_lock) in successes.iter().filter_map(|e| e.as_ref().ok()) {
         c.shell().status(
             "Verfying",
@@ -326,7 +317,17 @@ pub fn check<'a>(
                 .current()
                 .expect("We've build localised workspaces. qed"),
         )?;
-        run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
+        let ws = run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
+        let new_pkg = ws.current().expect("Each workspace is for a package!");
+        replaces.insert(
+            new_pkg.name().as_str().to_owned(),
+            new_pkg.manifest_path()
+                        .parent()
+                        .expect("Folder exists")
+                        .to_str()
+                        .expect("Is stringifiable")
+                        .to_owned(),
+        );
     }
     Ok(())
 }
