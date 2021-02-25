@@ -306,8 +306,11 @@ pub fn check<'a>(
 
     c.shell().status("Checking", "Packages")?;
 
-
-
+    // Let's keep a reference to the already build packages and their unpacked
+    // location, so they can be injected as dependencies to the packages build
+    // later in the dependency graph. Through patching them in we make sure that
+    // the packages can be build free of the workspace they orginated but together
+    // with the other packages queued for release.
     let mut replaces = HashMap::new();
 
     for (pkg_ws, rw_lock) in successes.iter().filter_map(|e| e.as_ref().ok()) {
@@ -321,12 +324,13 @@ pub fn check<'a>(
         let new_pkg = ws.current().expect("Each workspace is for a package!");
         replaces.insert(
             new_pkg.name().as_str().to_owned(),
-            new_pkg.manifest_path()
-                        .parent()
-                        .expect("Folder exists")
-                        .to_str()
-                        .expect("Is stringifiable")
-                        .to_owned(),
+            new_pkg
+                .manifest_path()
+                .parent()
+                .expect("Folder exists")
+                .to_str()
+                .expect("Is stringifiable")
+                .to_owned(),
         );
     }
     Ok(())
