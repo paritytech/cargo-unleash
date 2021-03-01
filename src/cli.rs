@@ -610,20 +610,18 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| {
                             let mut v = p.version().clone();
                             v.pre = Vec::new();
-                            if v.major == 0 {
-                                if v.minor == 0 {
-                                    // 0.0.x means each patch is breaking, see:
-                                    // https://doc.rust-lang.org/cargo/reference/semver.html#change-categories
-
-                                    v.patch += 1;
-                                    // no helper, have to reset the metadata ourselves
-                                    v.build = Vec::new();
-                                    v.pre = Vec::new();
-                                } else {
-                                    v.increment_minor();
-                                }
-                            } else {
+                            if v.major != 0 {
                                 v.increment_major();
+                            } else if v.minor != 0 {
+                                v.increment_minor();
+                            } else {
+                                // 0.0.x means each patch is breaking, see:
+                                // https://doc.rust-lang.org/cargo/reference/semver.html#change-categories
+
+                                v.patch += 1;
+                                // no helper, have to reset the metadata ourselves
+                                v.build = Vec::new();
+                                v.pre = Vec::new();
                             }
                             Some(v)
                         },
