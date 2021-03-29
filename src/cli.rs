@@ -239,6 +239,9 @@ pub enum Command {
         include_dev: bool,
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
+        /// Consider no package matching the criteria an error
+        #[structopt(long)]
+        empty_is_failure: bool,
     },
     /// Check whether crates can be packaged
     ///
@@ -265,6 +268,9 @@ pub enum Command {
         /// check whether the existing Readme (if any) matches.
         #[structopt(long)]
         check_readme: bool,
+        /// Consider no package matching the criteria an error
+        #[structopt(long)]
+        empty_is_failure: bool,
     },
     /// Generate Readme files
     ///
@@ -284,7 +290,9 @@ pub enum Command {
             case_insensitive = true
         )]
         readme_mode: GenerateReadmeMode,
-        // add template, dry-run
+        /// Consider no package matching the criteria an error
+        #[structopt(long)]
+        empty_is_failure: bool,
     },
     /// Unleash 'em dragons
     ///
@@ -322,6 +330,9 @@ pub enum Command {
         /// check whether the existing Readme (if any) matches.
         #[structopt(long)]
         check_readme: bool,
+        /// Consider no package matching the criteria an error
+        #[structopt(long)]
+        empty_is_failure: bool,
     },
 }
 
@@ -685,6 +696,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         Command::ToRelease {
             include_dev,
             pkg_opts,
+            empty_is_failure,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -692,6 +704,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
+            if packages.is_empty() {
+                if empty_is_failure {
+                    return Err("No Packages matching criteria. Exiting".into());
+                } else {
+                    println!("No packages selected. All good. Exiting.");
+                    return Ok(());
+                }
+            }
             println!(
                 "{:}",
                 packages
@@ -708,6 +728,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             build,
             pkg_opts,
             check_readme,
+            empty_is_failure,
         } => {
             if check_readme {
                 verify_readme_feature()?;
@@ -719,6 +740,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
+            if packages.is_empty() {
+                if empty_is_failure {
+                    return Err("No Packages matching criteria. Exiting".into());
+                } else {
+                    println!("No packages selected. All good. Exiting.");
+                    return Ok(());
+                }
+            }
 
             commands::check(&packages, &ws, build, check_readme)
         }
@@ -726,6 +755,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         Command::GenReadme {
             pkg_opts,
             readme_mode,
+            empty_is_failure,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(false, &predicate)?;
@@ -733,6 +763,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let packages = commands::packages_to_release(&ws, predicate)?;
+            if packages.is_empty() {
+                if empty_is_failure {
+                    return Err("No Packages matching criteria. Exiting".into());
+                } else {
+                    println!("No packages selected. All good. Exiting.");
+                    return Ok(());
+                }
+            }
 
             commands::gen_all_readme(packages, &ws, readme_mode)
         }
@@ -745,6 +783,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             build,
             pkg_opts,
             check_readme,
+            empty_is_failure,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -753,6 +792,14 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
 
             let packages = commands::packages_to_release(&ws, predicate)?;
+            if packages.is_empty() {
+                if empty_is_failure {
+                    return Err("No Packages matching criteria. Exiting".into());
+                } else {
+                    println!("No packages selected. All good. Exiting.");
+                    return Ok(());
+                }
+            }
 
             if !no_check {
                 if check_readme {
