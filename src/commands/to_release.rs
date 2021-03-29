@@ -115,9 +115,5 @@ where
         .rev()
         .collect::<Vec<_>>();
 
-    if packages.is_empty() {
-        return Err("No Packages matching criteria. Exiting".into());
-    }
-
     Ok(packages)
 }
