@@ -204,7 +204,10 @@ pub enum Command {
         pkg_opts: PackageSelectOptions,
         /// Owner to add to the packages
         owner: String,
-        // the token to use for uploading
+        /// the crates.io token to use for API access
+        ///
+        /// If this is nor the environment variable are set, this falls
+        /// back to the default value provided in the user directory
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>,
     },
@@ -320,7 +323,10 @@ pub enum Command {
         /// Ensure we have the owner set as well
         #[structopt(long = "owner")]
         add_owner: Option<String>,
-        // the token to use for uploading
+        /// the crates.io token to use for uploading
+        ///
+        /// If this is nor the environment variable are set, this falls
+        /// back to the default value provided in the user directory
         #[structopt(long, env = "CRATES_TOKEN", hide_env_values = true)]
         token: Option<String>,
         /// Generate & verify whether the Readme file has changed.
@@ -421,7 +427,17 @@ fn verify_readme_feature() -> Result<(), String> {
 
 pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     let _ = Logger::with_str(args.log.clone()).start();
-    let c = CargoConfig::default().expect("Couldn't create cargo config");
+    let mut c = CargoConfig::default().expect("Couldn't create cargo config");
+    c.values()?;
+    c.load_credentials()?;
+
+    let get_token = |t| -> Result<Option<String>, Box<dyn Error>> {
+        Ok(match t {
+            None => c.get_string("registry.token")?.map(|x| x.val),
+            _ => t,
+        })
+    };
+
     c.shell().set_verbosity(if args.verbose {
         Verbosity::Verbose
     } else {
@@ -470,8 +486,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let predicate = make_pkg_predicate(pkg_opts)?;
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            let t = get_token(token)?;
             for pkg in ws.members().filter(|p| predicate(p)) {
-                commands::add_owner(ws.config(), &pkg, owner.clone(), token.clone())?;
+                commands::add_owner(ws.config(), &pkg, owner.clone(), t.clone())?;
             }
             Ok(())
         }
@@ -818,7 +835,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     .join(", "),
             )?;
 
-            commands::release(packages, ws, dry_run, token, add_owner)
+            commands::release(packages, ws, dry_run, get_token(token)?, add_owner)
         }
     }
 }
