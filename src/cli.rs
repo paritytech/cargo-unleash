@@ -90,6 +90,19 @@ pub enum VersionCommand {
         #[structopt(long)]
         force_update: bool,
     },
+    /// Smart bumping of crates for the next breaking release and add a `-dev`-pre-release-tag
+    BumpToDev {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+        /// Force an update of dependencies
+        ///
+        /// Hard set to the new version, do not check whether the given one still matches
+        #[structopt(long)]
+        force_update: bool,
+        /// Use this identifier instead of `dev`  for the pre-release
+        #[structopt(parse(from_str = parse_identifiers))]
+        pre_tag: Option<Identifier>,
+    },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
     BumpPre {
         #[structopt(flatten)]
@@ -685,6 +698,38 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                                 v.build = Vec::new();
                                 v.pre = Vec::new();
                             }
+                            Some(v)
+                        },
+                        force_update,
+                    )
+                }
+                VersionCommand::BumpToDev {
+                    pkg_opts,
+                    force_update,
+                    pre_tag,
+                } => {
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+                    let pre_val =
+                        pre_tag.unwrap_or_else(|| Identifier::AlphaNumeric("dev".to_owned()));
+                    commands::set_version(
+                        &ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            if v.major != 0 {
+                                v.increment_major();
+                            } else if v.minor != 0 {
+                                v.increment_minor();
+                            } else {
+                                // 0.0.x means each patch is breaking, see:
+                                // https://doc.rust-lang.org/cargo/reference/semver.html#change-categories
+
+                                v.patch += 1;
+                                // no helper, have to reset the metadata ourselves
+                                v.build = Vec::new();
+                            }
+                            // force the pre
+                            v.pre = vec![pre_val.clone()];
                             Some(v)
                         },
                         force_update,
