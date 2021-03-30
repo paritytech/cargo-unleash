@@ -12,6 +12,7 @@ use structopt::StructOpt;
 use toml_edit::Value;
 
 use crate::commands;
+use crate::util;
 
 fn parse_identifiers(src: &str) -> Identifier {
     Identifier::AlphaNumeric(src.to_owned())
@@ -57,6 +58,14 @@ pub struct PackageSelectOptions {
     /// regardless, set this flag.
     #[structopt(long)]
     ignore_publish: bool,
+    /// Automatically detect the packages, which changed compared to the given git commit.
+    ///
+    /// Compares the current git `head` to the reference given, identifies which files changed
+    /// and attempts to identify the packages and its dependents through that mechanism. You
+    /// can use any `tag`, `branch` or `commit`, but you must be sure it is available
+    /// (and up to date) locally.
+    #[structopt(short = "c", long="changed-since")]
+    pub changed_since: Option<String>,
 }
 
 #[derive(StructOpt, Debug)]
@@ -365,19 +374,28 @@ pub struct Opt {
     pub cmd: Command,
 }
 
-fn make_pkg_predicate(args: PackageSelectOptions) -> Result<impl Fn(&Package) -> bool, String> {
+fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package) -> bool>, String> {
     let PackageSelectOptions {
         packages,
         skip,
         ignore_pre_version,
         ignore_publish,
+        changed_since,
     } = args;
 
-    if !packages.is_empty() && (!skip.is_empty() || !ignore_pre_version.is_empty()) {
-        return Err(
-            "-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
-                .into(),
-        );
+    if !packages.is_empty() {
+        if !skip.is_empty() || !ignore_pre_version.is_empty() {
+            return Err(
+                "-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
+                    .into(),
+            );
+        }
+        if changed_since.is_some() {
+            return Err(
+                "-p/--packages is mutually exlusive to using -c/--changed-since"
+                    .into(),
+            );
+        }
     }
 
     let publish = move |p: &Package| {
@@ -389,7 +407,24 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<impl Fn(&Package) ->
         value
     };
 
-    Ok(move |p: &Package| {
+    if let Some(changed_since) = changed_since {
+        if !skip.is_empty() || !ignore_pre_version.is_empty() {
+            return Err(
+                "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
+                    .into(),
+            );
+        }
+
+        let changed = util::changed_packages(ws, &changed_since)?;
+        return Ok(Box::new(move |p: &Package| {
+            if !publish(p) {
+                return false;
+            }
+            return changed.contains(p)
+        }));
+    };
+
+    Ok(Box::new(move |p: &Package| {
         if !publish(p) {
             return false;
         }
@@ -414,7 +449,7 @@ fn make_pkg_predicate(args: PackageSelectOptions) -> Result<impl Fn(&Package) ->
         }
 
         true
-    })
+    }))
 }
 
 fn verify_readme_feature() -> Result<(), String> {
@@ -473,9 +508,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             pkg_opts,
             check_only,
         } => {
-            let predicate = make_pkg_predicate(pkg_opts)?;
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             commands::clean_up_unused_dependencies(&ws, predicate, check_only)
         }
         Command::AddOwner {
@@ -483,10 +518,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             token,
             pkg_opts,
         } => {
-            let predicate = make_pkg_predicate(pkg_opts)?;
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
             let t = get_token(token)?;
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+
             for pkg in ws.members().filter(|p| predicate(p)) {
                 commands::add_owner(ws.config(), &pkg, owner.clone(), t.clone())?;
             }
@@ -501,7 +538,11 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             if name == "name" {
                 return Err("To change the name please use the rename command!".into());
             }
-            let predicate = make_pkg_predicate(pkg_opts)?;
+
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             let type_value = {
                 if let Ok(v) = bool::from_str(&value) {
                     Value::from(v)
@@ -512,8 +553,6 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 }
             };
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             commands::set_field(
                 ws.members()
                     .filter(|p| predicate(p) && c.shell().status("Setting on", p.name()).is_ok()),
@@ -539,7 +578,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     force_update,
                     version,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -551,7 +590,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -580,7 +619,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -597,7 +636,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -614,7 +653,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -631,7 +670,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -661,7 +700,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -678,7 +717,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -694,7 +733,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pkg_opts,
                     force_update,
                 } => {
-                    let predicate = make_pkg_predicate(pkg_opts)?;
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
@@ -709,17 +748,21 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Command::DeDevDeps { pkg_opts } => maybe_patch(false, &make_pkg_predicate(pkg_opts)?),
+        Command::DeDevDeps { pkg_opts } => {
+            let ws = Workspace::new(&root_manifest, &c)
+                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            maybe_patch(false, &make_pkg_predicate(&ws, pkg_opts)?)
+        },
         Command::ToRelease {
             include_dev,
             pkg_opts,
             empty_is_failure,
         } => {
-            let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
-
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            maybe_patch(include_dev, &predicate)?;
+
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
@@ -751,11 +794,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 verify_readme_feature()?;
             }
 
-            let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
-
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            maybe_patch(include_dev, &predicate)?;
+
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
@@ -774,11 +818,12 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             readme_mode,
             empty_is_failure,
         } => {
-            let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(false, &predicate)?;
-
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            maybe_patch(false, &predicate)?;
+
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
@@ -802,11 +847,10 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             check_readme,
             empty_is_failure,
         } => {
-            let predicate = make_pkg_predicate(pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
-
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            maybe_patch(include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
