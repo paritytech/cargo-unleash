@@ -1,0 +1,7 @@
+
+[workspace]
+members = [
+    "crate_a",
+    "leftpad",
+    "left-pad",
+]
