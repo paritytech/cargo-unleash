@@ -64,7 +64,7 @@ pub struct PackageSelectOptions {
     /// and attempts to identify the packages and its dependents through that mechanism. You
     /// can use any `tag`, `branch` or `commit`, but you must be sure it is available
     /// (and up to date) locally.
-    #[structopt(short = "c", long="changed-since")]
+    #[structopt(short = "c", long = "changed-since")]
     pub changed_since: Option<String>,
 }
 
@@ -89,6 +89,19 @@ pub enum VersionCommand {
         /// Hard set to the new version, do not check whether the given one still matches
         #[structopt(long)]
         force_update: bool,
+    },
+    /// Smart bumping of crates for the next breaking release and add a `-dev`-pre-release-tag
+    BumpToDev {
+        #[structopt(flatten)]
+        pkg_opts: PackageSelectOptions,
+        /// Force an update of dependencies
+        ///
+        /// Hard set to the new version, do not check whether the given one still matches
+        #[structopt(long)]
+        force_update: bool,
+        /// Use this identifier instead of `dev`  for the pre-release
+        #[structopt(parse(from_str = parse_identifiers))]
+        pre_tag: Option<Identifier>,
     },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
     BumpPre {
@@ -374,7 +387,10 @@ pub struct Opt {
     pub cmd: Command,
 }
 
-fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<Box<dyn Fn(&Package) -> bool>, String> {
+fn make_pkg_predicate(
+    ws: &Workspace<'_>,
+    args: PackageSelectOptions,
+) -> Result<Box<dyn Fn(&Package) -> bool>, String> {
     let PackageSelectOptions {
         packages,
         skip,
@@ -391,10 +407,7 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
             );
         }
         if changed_since.is_some() {
-            return Err(
-                "-p/--packages is mutually exlusive to using -c/--changed-since"
-                    .into(),
-            );
+            return Err("-p/--packages is mutually exlusive to using -c/--changed-since".into());
         }
     }
 
@@ -420,7 +433,7 @@ fn make_pkg_predicate(ws: &Workspace<'_>, args: PackageSelectOptions) -> Result<
             if !publish(p) {
                 return false;
             }
-            return changed.contains(p)
+            return changed.contains(p);
         }));
     };
 
@@ -695,6 +708,38 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         force_update,
                     )
                 }
+                VersionCommand::BumpToDev {
+                    pkg_opts,
+                    force_update,
+                    pre_tag,
+                } => {
+                    let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+                    let pre_val =
+                        pre_tag.unwrap_or_else(|| Identifier::AlphaNumeric("dev".to_owned()));
+                    commands::set_version(
+                        &ws,
+                        |p| predicate(p),
+                        |p| {
+                            let mut v = p.version().clone();
+                            if v.major != 0 {
+                                v.increment_major();
+                            } else if v.minor != 0 {
+                                v.increment_minor();
+                            } else {
+                                // 0.0.x means each patch is breaking, see:
+                                // https://doc.rust-lang.org/cargo/reference/semver.html#change-categories
+
+                                v.patch += 1;
+                                // no helper, have to reset the metadata ourselves
+                                v.build = Vec::new();
+                            }
+                            // force the pre
+                            v.pre = vec![pre_val.clone()];
+                            Some(v)
+                        },
+                        force_update,
+                    )
+                }
                 VersionCommand::SetPre {
                     pre,
                     pkg_opts,
@@ -752,7 +797,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let ws = Workspace::new(&root_manifest, &c)
                 .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             maybe_patch(false, &make_pkg_predicate(&ws, pkg_opts)?)
-        },
+        }
         Command::ToRelease {
             include_dev,
             pkg_opts,
