@@ -431,10 +431,10 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
     c.values()?;
     c.load_credentials()?;
 
-    let get_token = |t| -> Result<Option<String>, Box<dyn Error>>{
+    let get_token = |t| -> Result<Option<String>, Box<dyn Error>> {
         Ok(match t {
             None => c.get_string("registry.token")?.map(|x| x.val),
-            _ => t
+            _ => t,
         })
     };
 
@@ -726,7 +726,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     return Err("No Packages matching criteria. Exiting".into());
                 } else {
                     println!("No packages selected. All good. Exiting.");
-                    return Ok(())
+                    return Ok(());
                 }
             }
             println!(
@@ -762,7 +762,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     return Err("No Packages matching criteria. Exiting".into());
                 } else {
                     println!("No packages selected. All good. Exiting.");
-                    return Ok(())
+                    return Ok(());
                 }
             }
 
@@ -772,7 +772,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         Command::GenReadme {
             pkg_opts,
             readme_mode,
-            empty_is_failure
+            empty_is_failure,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(false, &predicate)?;
@@ -785,7 +785,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     return Err("No Packages matching criteria. Exiting".into());
                 } else {
                     println!("No packages selected. All good. Exiting.");
-                    return Ok(())
+                    return Ok(());
                 }
             }
 
@@ -800,7 +800,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             build,
             pkg_opts,
             check_readme,
-            empty_is_failure
+            empty_is_failure,
         } => {
             let predicate = make_pkg_predicate(pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
@@ -814,7 +814,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     return Err("No Packages matching criteria. Exiting".into());
                 } else {
                     println!("No packages selected. All good. Exiting.");
-                    return Ok(())
+                    return Ok(());
                 }
             }
 
