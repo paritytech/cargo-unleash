@@ -1,20 +1,27 @@
 use cargo::{
     core::{package::Package, Workspace},
-    util::interning::InternedString,
     sources::PathSource,
+    util::interning::InternedString,
 };
-use log::{warn, trace};
+use git2::Repository;
+use log::{trace, warn};
+use petgraph::{graph::NodeIndex, Directed, Graph};
 use std::{
-    collections::{HashSet, HashMap},
-    error::Error, fs,
+    collections::{HashMap, HashSet},
+    error::Error,
+    fs,
 };
 use toml_edit::{Document, InlineTable, Item, Table, Value};
-use petgraph::{Directed, Graph, graph::NodeIndex};
-use git2::{Repository};
 
 /// Calculate the dependents graph
-pub fn changed_dependents<'a, F>(all_members: Vec<Package>, changed: &HashSet<Package>, predicate: F)
-    -> (Graph::<Package, u8, Directed, u32>, HashMap<InternedString, NodeIndex<u32>>)
+pub fn changed_dependents<'a, F>(
+    all_members: Vec<Package>,
+    changed: &HashSet<Package>,
+    predicate: F,
+) -> (
+    Graph<Package, u8, Directed, u32>,
+    HashMap<InternedString, NodeIndex<u32>>,
+)
 where
     F: Fn(&Package) -> bool,
 {
@@ -44,7 +51,11 @@ where
     }
 
     'members: for member in all_members.iter() {
-        let member_index = if let Some(i) = map.get(&member.name()) { i } else { continue };
+        let member_index = if let Some(i) = map.get(&member.name()) {
+            i
+        } else {
+            continue;
+        };
         for pkg in changed.iter() {
             if let Some(pkg_idx) = map.get(&pkg.name()) {
                 if petgraph::algo::has_path_connecting(&graph, *pkg_idx, *member_index, None) {
@@ -60,17 +71,20 @@ where
     (graph, map)
 }
 
-pub fn changed_packages<'a>(ws: &'a Workspace, reference: &str) -> Result<HashSet<Package>, String> {
-
+pub fn changed_packages<'a>(
+    ws: &'a Workspace,
+    reference: &str,
+) -> Result<HashSet<Package>, String> {
     ws.config()
         .shell()
         .status("Calculating", format!("git diff since {:}", reference))
         .expect("Writing to Shell doesn't fail");
 
     let path = ws.root();
-    let repo = Repository::open(&path)
-        .map_err(|e| format!("Workspace isn't a git repo: {:?}", e))?;
-    let current_head = repo.head()
+    let repo =
+        Repository::open(&path).map_err(|e| format!("Workspace isn't a git repo: {:?}", e))?;
+    let current_head = repo
+        .head()
         .and_then(|b| b.peel_to_commit())
         .and_then(|c| c.tree())
         .map_err(|e| format!("Could not determine current git HEAD: {:?}", e))?;
