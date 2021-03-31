@@ -1,4 +1,4 @@
-use left_pad::Astruct;
+use cu_left_pad::Astruct;
 
 fn main() {
     let _ = Astruct;

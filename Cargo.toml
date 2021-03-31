@@ -30,7 +30,7 @@ regex = "1.4.1"
 git2 = "0.13.10"
 
 # CARGO VERSION BOUND dependencies
-cargo = "0.51.0"
+cargo = "0.52.0"
 flate2 = "1.0.3"
 semver = "0.10.0"
 tar = "0.4.26"
@@ -38,7 +38,7 @@ tar = "0.4.26"
 # Optional dependencies
 cargo-readme = { version = "3.2", optional = true }
 lazy_static = { version = "1.4", optional = true }
-sha1 = { version="0.6", optional = true }
+sha1 = { version = "0.6", optional = true }
 
 
 [dev-dependencies]

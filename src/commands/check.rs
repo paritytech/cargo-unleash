@@ -126,6 +126,7 @@ fn run_check<'a>(
             target_rustc_args: rustc_args,
             local_rustdoc_args: None,
             rustdoc_document_private_items: false,
+            honor_rust_version: false,
         },
         &exec,
     )?;
@@ -285,7 +286,10 @@ pub fn check<'a>(
         match package(&pkg_ws, &opts) {
             Ok(Some(rw_lock)) => Ok((pkg_ws, rw_lock)),
             Ok(None) => Err(format!("Failure packing {:}", pkg.name())),
-            Err(e) => Err(format!("Failure packing {:}: {}", pkg.name(), e)),
+            Err(e) => {
+                cargo::display_error(&e, &mut c.shell());
+                Err(format!("Failure packing {:}: {}", pkg.name(), e))
+            }
         }
     });
 

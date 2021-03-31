@@ -66,6 +66,10 @@ pub struct PackageSelectOptions {
     /// (and up to date) locally.
     #[structopt(short = "c", long = "changed-since")]
     pub changed_since: Option<String>,
+    /// Even if not selected by default, also include depedencies with a pre (cascading)
+    ///
+    #[structopt(long)]
+    pub include_pre_deps: bool,
 }
 
 #[derive(StructOpt, Debug)]
@@ -397,6 +401,7 @@ fn make_pkg_predicate(
         ignore_pre_version,
         ignore_publish,
         changed_since,
+        include_pre_deps,
     } = args;
 
     if !packages.is_empty() {
@@ -419,6 +424,9 @@ fn make_pkg_predicate(
         trace!("{:}.publish={}", p.name(), value);
         value
     };
+    let check_version = move |p: &Package| {
+        return include_pre_deps && p.version().is_prerelease()
+    };
 
     if let Some(changed_since) = changed_since {
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
@@ -433,7 +441,7 @@ fn make_pkg_predicate(
             if !publish(p) {
                 return false;
             }
-            return changed.contains(p);
+            return changed.contains(p) || check_version(p);
         }));
     };
 
@@ -444,7 +452,7 @@ fn make_pkg_predicate(
 
         if !packages.is_empty() {
             trace!("going for matching against {:?}", packages);
-            return packages.contains(&p.name());
+            return packages.contains(&p.name()) || check_version(p);
         }
 
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
