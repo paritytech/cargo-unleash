@@ -3,5 +3,6 @@
 members = [
     "crate_a",
     "leftpad",
-    "left-pad",
+    "cu-left-pad",
+    "unicode-width",
 ]

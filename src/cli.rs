@@ -65,7 +65,11 @@ pub struct PackageSelectOptions {
     /// can use any `tag`, `branch` or `commit`, but you must be sure it is available
     /// (and up to date) locally.
     #[structopt(short = "c", long = "changed-since")]
-    pub changed_since: String,
+    pub changed_since: Option<String>,
+    /// Even if not selected by default, also include depedencies with a pre (cascading)
+    ///
+    #[structopt(long)]
+    pub include_pre_deps: bool,
 }
 
 #[derive(StructOpt, Debug)]
@@ -397,6 +401,7 @@ fn make_pkg_predicate(
         ignore_pre_version,
         ignore_publish,
         changed_since,
+        include_pre_deps,
     } = args;
 
     if !packages.is_empty() {
@@ -406,7 +411,7 @@ fn make_pkg_predicate(
                     .into(),
             );
         }
-        if changed_since.len() != 0 {
+        if changed_since.is_some() {
             return Err("-p/--packages is mutually exlusive to using -c/--changed-since".into());
         }
     }
@@ -419,43 +424,47 @@ fn make_pkg_predicate(
         trace!("{:}.publish={}", p.name(), value);
         value
     };
-    if changed_since.len() != 0 {
+    let check_version = move |p: &Package| return include_pre_deps && p.version().is_prerelease();
+
+    let changed = if let Some(changed_since) = &changed_since {
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
             return Err(
                 "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
                     .into(),
             );
         }
-    }
-
-    let changed = util::changed_packages(ws, &changed_since)?;
-    if changed.len() == 0 {
-        return Err("No changes detected".into());
+        Some(util::changed_packages(ws, &changed_since)?)
+    } else {
+        None
     };
 
-    ws.config()
-        .shell()
-        .status("Calculating", "Dependents of changed crates")
-        .expect("Writing to Shell doesn't fail");
+    // ws.config()
+    //     .shell()
+    //     .status("Calculating", "Dependents of changed crates")
+    //     .expect("Writing to Shell doesn't fail");
 
     // FIXME: run through the changed once, mark which ones have major-changes
     //        update the set of changed to reflect that and calculate the
     //        remaining graph from that, probably useful to upgrade after
     //        every cycle
-    let (dependents_graph, dependents_map) = util::changed_dependents(
-        util::members_deep(ws).into_iter().filter(|p| publish(&p)).collect(),
-        &changed,
-        publish
-    );
+    // let (dependents_graph, dependents_map) = util::changed_dependents(
+    //     util::members_deep(ws).into_iter().filter(|p| publish(&p)).collect(),
+    //     &changed,
+    //     publish
+    // );
 
     Ok(move |p: &Package| {
         if !publish(p) {
             return false;
         }
 
+        if let Some(changed) = &changed {
+            return changed.contains(p) || check_version(p);
+        }
+
         if !packages.is_empty() {
             trace!("going for matching against {:?}", packages);
-            return packages.contains(&p.name());
+            return packages.contains(&p.name()) || check_version(p);
         }
 
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
