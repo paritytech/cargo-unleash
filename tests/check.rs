@@ -13,9 +13,9 @@ fn check_include_pre() -> Result<(), Box<dyn std::error::Error>> {
         .arg(temp.path())
         .arg("check")
         .arg("--packages")
-        .arg("crateA")
+        .arg("crate_a")
         .arg("--include-pre-deps");
-    cmd.assert().success();
+    cmd.assert().success().code(0);
     temp.close()?;
     Ok(())
 }
