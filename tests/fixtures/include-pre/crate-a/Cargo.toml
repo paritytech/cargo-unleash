@@ -1,17 +1,12 @@
 [package]
-name = "crate_a"
+name = "crate-a"
 version = "0.1.0"
 authors = ["a <a@be.com"]
 edition = "2018"
 license = "MIT"
 description = "a description"
-repository = "github.com/paritytech/cargo-unleash"
-exclude = [
-    "Cargo.lock",
-    "Cargo.toml.orig"
-]
+repository = "github.com"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 # this one is already released

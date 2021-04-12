@@ -1,7 +1,7 @@
 
 [workspace]
 members = [
-    "crate_a",
+    "crate-a",
     "leftpad",
     "cu-left-pad",
     "unicode-width",
