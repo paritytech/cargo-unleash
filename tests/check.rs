@@ -1,17 +1,10 @@
-use assert_fs::prelude::*;
 use assert_cmd::prelude::*;
+use assert_fs::prelude::*;
+use cargo::{core::source::SourceId, ops::read_package, util::config::Config as CargoConfig};
 use predicates::prelude::*;
-use std::process::Command;
 use semver::Version;
 use std::path;
-use cargo::{
-    core::source::SourceId,
-    util::config::{
-        Config as CargoConfig
-    },
-    ops::read_package
-};
-
+use std::process::Command;
 
 #[test]
 fn check_include_pre() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,17 +13,13 @@ fn check_include_pre() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut cmd = Command::cargo_bin("cargo-unleash")?;
 
-    cmd
-        .arg("--manifest-path")
+    cmd.arg("--manifest-path")
         .arg(temp.path())
         .arg("check")
         .arg("--packages")
         .arg("crate_a")
         .arg("--include-pre-deps");
-    cmd
-        .assert()
-        .success()
-        .code(0);
+    cmd.assert().success().code(0);
     temp.close()?;
     Ok(())
 }

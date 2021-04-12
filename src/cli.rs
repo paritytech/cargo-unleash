@@ -424,9 +424,7 @@ fn make_pkg_predicate(
         trace!("{:}.publish={}", p.name(), value);
         value
     };
-    let check_version = move |p: &Package| {
-        return include_pre_deps && p.version().is_prerelease()
-    };
+    let check_version = move |p: &Package| return include_pre_deps && p.version().is_prerelease();
 
     if let Some(changed_since) = changed_since {
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
