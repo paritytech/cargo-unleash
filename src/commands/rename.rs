@@ -64,7 +64,7 @@ where
         },
     )?
     .into_iter()
-    .filter_map(|s| s)
+    .flatten()
     .collect::<HashMap<_, _>>();
 
     if updates.is_empty() {
