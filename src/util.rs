@@ -2,10 +2,63 @@ use cargo::{
     core::{package::Package, Workspace},
     sources::PathSource,
 };
-use log::warn;
-use std::{error::Error, fs};
+use git2::Repository;
+use log::{trace, warn};
+use std::{collections::HashSet, error::Error, fs};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 
+pub fn changed_packages<'a>(
+    ws: &'a Workspace,
+    reference: &str,
+) -> Result<HashSet<Package>, String> {
+    ws.config()
+        .shell()
+        .status("Calculating", format!("git diff since {:}", reference))
+        .expect("Writing to Shell doesn't fail");
+
+    let path = ws.root();
+    let repo =
+        Repository::open(&path).map_err(|e| format!("Workspace isn't a git repo: {:?}", e))?;
+    let current_head = repo
+        .head()
+        .and_then(|b| b.peel_to_commit())
+        .and_then(|c| c.tree())
+        .map_err(|e| format!("Could not determine current git HEAD: {:?}", e))?;
+    let main = repo
+        .resolve_reference_from_short_name(reference)
+        .and_then(|d| d.peel_to_commit())
+        .and_then(|c| c.tree())
+        .map_err(|e| format!("Reference not found in git repository: {:?}", e))?;
+
+    let diff = repo
+        .diff_tree_to_tree(Some(&current_head), Some(&main), None)
+        .map_err(|e| format!("Diffing failed: {:?}", e))?;
+
+    let files = diff
+        .deltas()
+        .filter_map(|d| d.new_file().path())
+        .filter_map(|d| if d.is_file() { d.parent() } else { Some(d) })
+        .map(|l| path.join(l))
+        .collect::<Vec<_>>();
+
+    trace!("Files changed since: {:#?}", files);
+
+    let mut packages = HashSet::new();
+
+    for m in members_deep(ws) {
+        let root = m.root();
+        for f in files.iter() {
+            if f.starts_with(root) {
+                packages.insert(m);
+                break;
+            }
+        }
+    }
+
+    Ok(packages)
+}
+
+// Find all members of the workspace, into the total depth
 pub fn members_deep(ws: &'_ Workspace) -> Vec<Package> {
     let mut total_list = Vec::new();
     for m in ws.members() {

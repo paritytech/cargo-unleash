@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog].
 
 ## Unreleased
 
+- Use saved credentials from `cargo login`
+- Do not fail if package selections turns up 0 (unless `--empty-is-failure` is given)
 - New [version command  now takes new `bump-breaking`](https://github.com/paritytech/cargo-unleash/pull/37) that bumps to the next breaking version
 - Fix: [dependency injection now uses localised packages exclusively](https://github.com/paritytech/cargo-unleash/pull/39), fixing the problem of leaking the local workspace path's into the build when only releasing a subset of crates
 - Fix: Updated to latest dependencies, cargo `0.51.0`.

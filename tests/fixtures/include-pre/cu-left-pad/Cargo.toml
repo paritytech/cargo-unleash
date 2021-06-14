@@ -1,0 +1,14 @@
+[package]
+name = "cu-left-pad"
+version = "1.0.0-dev"
+authors = ["a <a@be.com"]
+edition = "2018"
+license = "MIT"
+description = "a description"
+repository = "github.com/paritytech/cargo-unleash"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+unicode-width = { path = "../unicode-width", version = "10.0.0-dev"}
+

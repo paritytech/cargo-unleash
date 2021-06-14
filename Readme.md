@@ -25,8 +25,6 @@ cargo unleash em-dragons --dry-run
 There are more options available on the CLI, just run with `--help`:
 
 ```bash
-
-cargo-unleash 1.0.0-alpha.11
 Release the crates of this massiv monorepo
 
 USAGE:
@@ -56,13 +54,14 @@ OPTIONS:
 SUBCOMMANDS:
     add-owner      Add owners for a lot of crates
     check          Check whether crates can be packaged
+    clean-deps     Check the package(s) for unused dependencies
     de-dev-deps    Deactivate the `[dev-dependencies]`
     em-dragons     Unleash 'em dragons
     help           Prints this message or the help of the given subcommand(s)
+    rename         Rename a package
     set            Set a field in all manifests
     to-release     Calculate the packages and the order in which to release
     version        Messing with versioning
-
 ```
 
 ### em-dragons
@@ -71,7 +70,6 @@ The main command is `cargo unleash em-dragons`, here is its help. All subcommand
 
 ```bash
 $ cargo-unleash em-dragons --help
-
 Unleash 'em dragons
 
 Package all selected crates, check them and attempt to publish them.
@@ -85,8 +83,16 @@ FLAGS:
 
             By default, this only runs `cargo check` against the package build. Set this flag to have it run an actual
             `build` instead.
+        --check-readme
+            Generate & verify whether the Readme file has changed.
+
+            When enabled, this will generate a Readme file from the crate's doc comments (using cargo-readme), and check
+            whether the existing Readme (if any) matches.
         --dry-run
             dry run
+
+        --empty-is-failure
+            Consider no package matching the criteria an error
 
     -h, --help
             Prints help information
@@ -94,8 +100,8 @@ FLAGS:
         --ignore-publish
             Ignore whether `publish` is set.
 
-            If nothing else is specified `publish = true` is assumed for every package. If publish is set to false or
-            any registry, it is ignore by default. If you want to include it regardless, set this flag.
+            If nothing else is specified, `publish = true` is assumed for every package. If publish is set to false or
+            any registry, it is ignored by default. If you want to include it regardless, set this flag.
         --include-dev-deps
             Do not disable dev-dependencies
 
@@ -119,15 +125,16 @@ OPTIONS:
             Only use the specfic set of packages
 
             Apply only to the packages named as defined. This is mutually exclusive with skip and ignore-version-pre.
-            Default: []
     -s, --skip <skip>...
-            skip the package names matching ...
+            Skip the package names matching ...
 
             Provide one or many regular expression that, if the package name matches, means we skip that package.
             Mutually exclusive with `--package`
         --token <token>
-             [env: CRATES_TOKEN]
+            the crates.io token to use for uploading
 
+            If this is nor the environment variable are set, this falls back to the default value provided in the user
+            directory [env: CRATES_TOKEN]
 ```
 
 ## Common Usage Examples

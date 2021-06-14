@@ -1,0 +1,16 @@
+[package]
+name = "crate-a"
+version = "0.1.0"
+authors = ["a <a@be.com"]
+edition = "2018"
+license = "MIT"
+description = "a description"
+repository = "github.com"
+
+
+[dependencies]
+# this one is already released
+leftpad = { version = "0.2.0", path = "../leftpad" }
+unicode-width = { version = "10.0.0-dev", path = "../unicode-width" }
+# this one isn't
+cu-left-pad = { version = "1.0.0-dev", path = "../cu-left-pad" }
