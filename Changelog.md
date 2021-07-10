@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog].
 
 ## Unreleased
 
+- New [version command now takes new `bump-to-dev`](https://github.com/paritytech/cargo-unleash/pull/47) that bumps to the next breaking version and appends a `-dev` pre-release value
 - Use saved credentials from `cargo login`
 - Do not fail if package selections turns up 0 (unless `--empty-is-failure` is given)
 
