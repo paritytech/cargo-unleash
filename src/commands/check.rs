@@ -178,7 +178,7 @@ fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
         _ => {}
     }
     match (metadata.license.as_ref(), metadata.license_file.as_ref()) {
-        (Some(ref s), None) | (None, Some(ref s)) if !s.is_empty() => {}
+        (Some(s), None) | (None, Some(s)) if !s.is_empty() => {}
         (Some(_), Some(_)) => bad_fields.push("You can't have license AND license_file"),
         _ => bad_fields.push("Neither license nor license_file is provided"),
     }
@@ -255,7 +255,7 @@ pub fn check<'a>(
     if check_readme {
         c.shell().status("Checking", "Readme files")?;
         let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
-            if let Err(e) = self::check_readme(&ws, &pkg) {
+            if let Err(e) = self::check_readme(ws, pkg) {
                 res.push(format!(
                     "{:}: Checking Readme file failed with: {:}",
                     pkg.name(),
@@ -331,7 +331,7 @@ pub fn check<'a>(
                 .current()
                 .expect("We've build localised workspaces. qed"),
         )?;
-        let ws = run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
+        let ws = run_check(pkg_ws, rw_lock, &opts, build_mode, &replaces)?;
         let new_pkg = ws.current().expect("Each workspace is for a package!");
         replaces.insert(
             new_pkg.name().as_str().to_owned(),

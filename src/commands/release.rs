@@ -56,7 +56,7 @@ pub fn release(
         c.shell().status("Publishing", &pkg)?;
         publish(&pkg_ws, &opts)?;
         if let Some(ref o) = owner {
-            add_owner(c, &pkg, o.clone(), token.clone())?;
+            add_owner(c, pkg, o.clone(), token.clone())?;
         }
     }
     Ok(())

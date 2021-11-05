@@ -430,7 +430,7 @@ fn make_pkg_predicate(
                     .into(),
             );
         }
-        Some(util::changed_packages(ws, &changed_since)?)
+        Some(util::changed_packages(ws, changed_since)?)
     } else {
         None
     };
@@ -537,7 +537,7 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
 
             for pkg in ws.members().filter(|p| predicate(p)) {
-                commands::add_owner(ws.config(), &pkg, owner.clone(), t.clone())?;
+                commands::add_owner(ws.config(), pkg, owner.clone(), t.clone())?;
             }
             Ok(())
         }
@@ -617,13 +617,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                                 let mut items = v
                                     .pre
                                     .as_str()
-                                    .split(".")
+                                    .split('.')
                                     .map(|s| s.to_string())
                                     .collect::<Vec<_>>();
                                 if let Some(num) = items.last().and_then(|u| u.parse::<u32>().ok())
                                 {
                                     let _ = items.pop();
-                                    items.push(format!("{}", num + 1).to_owned());
+                                    items.push(format!("{}", num + 1));
                                 } else {
                                     items.push("1".to_owned());
                                 }

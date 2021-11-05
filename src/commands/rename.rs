@@ -51,7 +51,7 @@ where
     let c = ws.config();
 
     let updates = edit_each(
-        members_deep(&ws).iter().filter(|p| predicate(p)),
+        members_deep(ws).iter().filter(|p| predicate(p)),
         |p, doc| {
             Ok(mapper(p).map(|new_name| {
                 c.shell()
@@ -73,7 +73,7 @@ where
     }
 
     c.shell().status("Updating", "Dependency tree")?;
-    edit_each(members_deep(&ws).iter(), |p, doc| {
+    edit_each(members_deep(ws).iter(), |p, doc| {
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
