@@ -5,9 +5,9 @@ use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
-        resolver::features::CliFeatures,
         manifest::ManifestMetadata,
         package::Package,
+        resolver::features::CliFeatures,
         Feature, SourceId, Workspace,
     },
     ops::{self, package, PackageOpts},
@@ -224,7 +224,7 @@ pub fn check<'a>(
             features: Default::default(),
             all_features: false,
             uses_default_features: true,
-        }
+        },
     };
 
     c.shell().status("Checking", "Metadata & Dependencies")?;
@@ -285,9 +285,13 @@ pub fn check<'a>(
             .status("Packing", &pkg)
             .map_err(|e| format!("{:}", e))?;
         match package(&pkg_ws, &opts) {
-            Ok(Some(mut rw_lock)) if rw_lock.len() == 1 =>
-                Ok((pkg_ws, rw_lock.pop().expect("we checked the counter"))),
-            Ok(Some(_rw_lock)) => Err(format!("Packing {:} produced more than one package", pkg.name())),
+            Ok(Some(mut rw_lock)) if rw_lock.len() == 1 => {
+                Ok((pkg_ws, rw_lock.pop().expect("we checked the counter")))
+            }
+            Ok(Some(_rw_lock)) => Err(format!(
+                "Packing {:} produced more than one package",
+                pkg.name()
+            )),
             Ok(None) => Err(format!("Failure packing {:}", pkg.name())),
             Err(e) => {
                 cargo::display_error(&e, &mut c.shell());

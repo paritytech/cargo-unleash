@@ -5,7 +5,7 @@ use cargo::{
 use flexi_logger::Logger;
 use log::trace;
 use regex::Regex;
-use semver::{Version, Prerelease, BuildMetadata};
+use semver::{BuildMetadata, Prerelease, Version};
 use std::{error::Error, fs, path::PathBuf, str::FromStr};
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
@@ -609,26 +609,30 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| {
                             let mut v = p.version().clone();
                             if v.pre.is_empty() {
-                                v.pre = Prerelease::new( "1").expect("Static will work");
+                                v.pre = Prerelease::new("1").expect("Static will work");
                             } else {
                                 if let Ok(num) = v.pre.as_str().parse::<u32>() {
-                                    v.pre = Prerelease::new(&format!("{}", num + 1)).expect("Knwon to work");
+                                    v.pre = Prerelease::new(&format!("{}", num + 1))
+                                        .expect("Knwon to work");
                                 } else {
-                                    let mut items = v.pre
+                                    let mut items = v
+                                        .pre
                                         .as_str()
                                         .split(".")
                                         .map(|s| s.to_string())
                                         .collect::<Vec<_>>();
-                                    if let Some(num) = items.last().and_then(|u| u.parse::<u32>().ok()) {
+                                    if let Some(num) =
+                                        items.last().and_then(|u| u.parse::<u32>().ok())
+                                    {
                                         let _ = items.pop();
                                         items.push(format!("{}", num + 1).to_owned());
                                     } else {
                                         items.push("1".to_owned());
                                     }
-                                    if let Ok(pre) = Prerelease::new(&items.join(".") ) {
+                                    if let Ok(pre) = Prerelease::new(&items.join(".")) {
                                         v.pre = pre;
-                                    }  else {
-                                        return None
+                                    } else {
+                                        return None;
                                     }
                                 }
                             }
@@ -769,8 +773,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = Prerelease::new(&pre.clone())
-                                .expect("Static or expected to work");
+                            v.pre =
+                                Prerelease::new(&pre.clone()).expect("Static or expected to work");
                             Some(v)
                         },
                         force_update,

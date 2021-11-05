@@ -62,7 +62,7 @@ fn bump_to_dev() -> Result<(), Box<dyn std::error::Error>> {
     let (crate_c, _) = read_package(&temp_path.join("crateC").join("Cargo.toml"), source, &cfg)?;
     assert_eq!(crate_a.version(), &Version::parse("0.2.0-dev")?);
     assert_eq!(crate_b.version(), &Version::parse("3.0.0-dev")?);
-    assert_eq!(crate_c.version(), &Version::parse("4.0.0-dev")?); // wasn't selected
+    assert_eq!(crate_c.version(), &Version::parse("4.0.0-dev")?);
 
     temp.close()?;
     Ok(())
