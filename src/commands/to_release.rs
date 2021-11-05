@@ -21,7 +21,7 @@ where
     let mut graph = Graph::<Package, (), _, _>::new();
     let members = members_deep(ws);
 
-    let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(&m));
+    let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(m));
 
     let ignored = to_ignore
         .into_iter()
@@ -48,7 +48,7 @@ where
         .expect("Updating from remote registry failed :( .");
 
     for m in members.iter() {
-        let dep = Dependency::parse_no_deprecated(
+        let dep = Dependency::parse(
             m.name(),
             Some(&m.version().to_string()),
             registry.source_id(),
@@ -106,7 +106,7 @@ where
     let indices = petgraph::algo::toposort(&graph, None).map_err(|c| {
         format!(
             "Cycle detected: {:}",
-            graph.node_weight(c.node_id()).unwrap().name().to_string()
+            graph.node_weight(c.node_id()).unwrap().name()
         )
     })?;
     let packages = indices

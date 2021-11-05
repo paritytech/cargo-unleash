@@ -7,15 +7,15 @@ use cargo::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
         manifest::ManifestMetadata,
         package::Package,
+        resolver::features::CliFeatures,
         Feature, SourceId, Workspace,
     },
     ops::{self, package, PackageOpts},
     sources::PathSource,
-    util::{paths, FileLock},
+    util::{FileLock, OptVersionReq},
 };
 use flate2::read::GzDecoder;
 use log::error;
-use semver::VersionReq;
 use std::{
     collections::HashMap,
     error::Error,
@@ -70,7 +70,7 @@ fn run_check<'a>(
         .parent()
         .join(&format!("{}-{}", pkg.name(), pkg.version()));
     if dst.exists() {
-        paths::remove_dir_all(&dst)?;
+        std::fs::remove_dir_all(&dst)?;
     }
     let mut archive = Archive::new(f);
     // We don't need to set the Modified Time, as it's not relevant to verification
@@ -115,10 +115,8 @@ fn run_check<'a>(
         &ws,
         &ops::CompileOptions {
             build_config: BuildConfig::new(config, opts.jobs, &opts.targets, build_mode)?,
-            features: opts.features.clone(),
-            no_default_features: opts.no_default_features,
-            all_features: opts.all_features,
             spec: ops::Packages::Packages(Vec::new()),
+            cli_features: opts.cli_features.clone(),
             filter: ops::CompileFilter::Default {
                 required_features_filterable: true,
             },
@@ -152,7 +150,7 @@ fn check_dependencies(package: &Package) -> Result<(), String> {
     let git_deps = package
         .dependencies()
         .iter()
-        .filter(|d| d.source_id().is_git() && d.version_req() == &VersionReq::any())
+        .filter(|d| d.source_id().is_git() && d.version_req() == &OptVersionReq::Any)
         .map(|d| format!("{:}", d.package_name()))
         .collect::<Vec<_>>();
     if !git_deps.is_empty() {
@@ -180,7 +178,7 @@ fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
         _ => {}
     }
     match (metadata.license.as_ref(), metadata.license_file.as_ref()) {
-        (Some(ref s), None) | (None, Some(ref s)) if !s.is_empty() => {}
+        (Some(s), None) | (None, Some(s)) if !s.is_empty() => {}
         (Some(_), Some(_)) => bad_fields.push("You can't have license AND license_file"),
         _ => bad_fields.push("Neither license nor license_file is provided"),
     }
@@ -219,11 +217,14 @@ pub fn check<'a>(
         check_metadata: true,
         list: false,
         allow_dirty: true,
-        all_features: false,
-        no_default_features: false,
         jobs: None,
+        to_package: ops::Packages::Default,
         targets: Default::default(),
-        features: Default::default(),
+        cli_features: CliFeatures {
+            features: Default::default(),
+            all_features: false,
+            uses_default_features: true,
+        },
     };
 
     c.shell().status("Checking", "Metadata & Dependencies")?;
@@ -254,7 +255,7 @@ pub fn check<'a>(
     if check_readme {
         c.shell().status("Checking", "Readme files")?;
         let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
-            if let Err(e) = self::check_readme(&ws, &pkg) {
+            if let Err(e) = self::check_readme(ws, pkg) {
                 res.push(format!(
                     "{:}: Checking Readme file failed with: {:}",
                     pkg.name(),
@@ -284,7 +285,13 @@ pub fn check<'a>(
             .status("Packing", &pkg)
             .map_err(|e| format!("{:}", e))?;
         match package(&pkg_ws, &opts) {
-            Ok(Some(rw_lock)) => Ok((pkg_ws, rw_lock)),
+            Ok(Some(mut rw_lock)) if rw_lock.len() == 1 => {
+                Ok((pkg_ws, rw_lock.pop().expect("we checked the counter")))
+            }
+            Ok(Some(_rw_lock)) => Err(format!(
+                "Packing {:} produced more than one package",
+                pkg.name()
+            )),
             Ok(None) => Err(format!("Failure packing {:}", pkg.name())),
             Err(e) => {
                 cargo::display_error(&e, &mut c.shell());
@@ -324,7 +331,7 @@ pub fn check<'a>(
                 .current()
                 .expect("We've build localised workspaces. qed"),
         )?;
-        let ws = run_check(&pkg_ws, &rw_lock, &opts, build_mode, &replaces)?;
+        let ws = run_check(pkg_ws, rw_lock, &opts, build_mode, &replaces)?;
         let new_pkg = ws.current().expect("Each workspace is for a package!");
         replaces.insert(
             new_pkg.name().as_str().to_owned(),

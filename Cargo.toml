@@ -29,11 +29,11 @@ petgraph = "0.5.0"
 regex = "1.4.1"
 
 # CARGO VERSION BOUND dependencies
-cargo = "0.53.0"
+cargo = "0.57.0"
 flate2 = "1.0.3"
-git2 = "0.13.10"
-semver = "0.10.0"
-tar = "0.4.26"
+git2 = "0.13.23"
+semver = "1.0.3"
+tar = "0.4.35"
 
 # Optional dependencies
 cargo-readme = { version = "3.2", optional = true }
