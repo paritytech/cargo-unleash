@@ -5,7 +5,7 @@ use cargo::{
 use flexi_logger::Logger;
 use log::trace;
 use regex::Regex;
-use semver::{Identifier, Version};
+use semver::{Version, Prerelease, BuildMetadata};
 use std::{error::Error, fs, path::PathBuf, str::FromStr};
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
@@ -14,9 +14,6 @@ use toml_edit::Value;
 use crate::commands;
 use crate::util;
 
-fn parse_identifiers(src: &str) -> Identifier {
-    Identifier::AlphaNumeric(src.to_owned())
-}
 fn parse_regex(src: &str) -> Result<Regex, String> {
     Regex::new(src).map_err(|e| format!("Parsing Regex failed: {:}", e))
 }
@@ -49,8 +46,8 @@ pub struct PackageSelectOptions {
     /// Ignore version pre-releases
     ///
     /// Skip if the SemVer pre-release field is any of the listed. Mutually exclusive with `--package`
-    #[structopt(short, long, parse(from_str = parse_identifiers))]
-    pub ignore_pre_version: Vec<Identifier>,
+    #[structopt(short, long)]
+    pub ignore_pre_version: Vec<String>,
     /// Ignore whether `publish` is set.
     ///
     /// If nothing else is specified, `publish = true` is assumed for every package. If publish
@@ -104,8 +101,8 @@ pub enum VersionCommand {
         #[structopt(long)]
         force_update: bool,
         /// Use this identifier instead of `dev`  for the pre-release
-        #[structopt(parse(from_str = parse_identifiers))]
-        pre_tag: Option<Identifier>,
+        #[structopt()]
+        pre_tag: Option<String>,
     },
     /// Increase the pre-release suffix, keep prefix, set to `.1` if no suffix is present
     BumpPre {
@@ -164,8 +161,8 @@ pub enum VersionCommand {
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
         /// The string to set the pre-release to
-        #[structopt(parse(from_str = parse_identifiers))]
-        pre: Identifier,
+        #[structopt()]
+        pre: String,
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
@@ -177,8 +174,8 @@ pub enum VersionCommand {
         #[structopt(flatten)]
         pkg_opts: PackageSelectOptions,
         /// The specific metadata to set to
-        #[structopt(parse(from_str = parse_identifiers))]
-        meta: Identifier,
+        #[structopt()]
+        meta: String,
         /// Force an update of dependencies
         ///
         /// Hard set to the new version, do not check whether the given one still matches
@@ -424,7 +421,7 @@ fn make_pkg_predicate(
         trace!("{:}.publish={}", p.name(), value);
         value
     };
-    let check_version = move |p: &Package| return include_pre_deps && p.version().is_prerelease();
+    let check_version = move |p: &Package| return include_pre_deps && !p.version().pre.is_empty();
 
     let changed = if let Some(changed_since) = &changed_since {
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
@@ -457,11 +454,9 @@ fn make_pkg_predicate(
             if skip.iter().any(|r| r.is_match(&name)) {
                 return false;
             }
-            if p.version().is_prerelease() {
-                for pre in &p.version().pre {
-                    if ignore_pre_version.contains(&pre) {
-                        return false;
-                    }
+            if !p.version().pre.is_empty() {
+                if ignore_pre_version.contains(&p.version().pre.as_str().to_owned()) {
+                    return false;
                 }
             }
         }
@@ -614,17 +609,27 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| {
                             let mut v = p.version().clone();
                             if v.pre.is_empty() {
-                                v.pre = vec![Identifier::Numeric(1)]
+                                v.pre = Prerelease::new( "1").expect("Static will work");
                             } else {
-                                match v.pre.pop() {
-                                    Some(Identifier::Numeric(num)) => {
-                                        v.pre.push(Identifier::Numeric(num + 1))
+                                if let Ok(num) = v.pre.as_str().parse::<u32>() {
+                                    v.pre = Prerelease::new(&format!("{}", num + 1)).expect("Knwon to work");
+                                } else {
+                                    let mut items = v.pre
+                                        .as_str()
+                                        .split(".")
+                                        .map(|s| s.to_string())
+                                        .collect::<Vec<_>>();
+                                    if let Some(num) = items.last().and_then(|u| u.parse::<u32>().ok()) {
+                                        let _ = items.pop();
+                                        items.push(format!("{}", num + 1).to_owned());
+                                    } else {
+                                        items.push("1".to_owned());
                                     }
-                                    Some(Identifier::AlphaNumeric(pre)) => {
-                                        v.pre.push(Identifier::AlphaNumeric(pre));
-                                        v.pre.push(Identifier::Numeric(1));
+                                    if let Ok(pre) = Prerelease::new(&items.join(".") ) {
+                                        v.pre = pre;
+                                    }  else {
+                                        return None
                                     }
-                                    _ => unreachable!("There is a last item"),
                                 }
                             }
                             Some(v)
@@ -642,8 +647,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = Vec::new();
-                            v.increment_patch();
+                            v.pre = Prerelease::EMPTY;
+                            v.patch += 1;
                             Some(v)
                         },
                         force_update,
@@ -659,8 +664,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = Vec::new();
-                            v.increment_minor();
+                            v.pre = Prerelease::EMPTY;
+                            v.minor += 1;
+                            v.patch = 0;
                             Some(v)
                         },
                         force_update,
@@ -676,8 +682,10 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = Vec::new();
-                            v.increment_major();
+                            v.pre = Prerelease::EMPTY;
+                            v.major += 1;
+                            v.minor = 0;
+                            v.patch = 0;
                             Some(v)
                         },
                         force_update,
@@ -693,19 +701,22 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = Vec::new();
+                            v.pre = Prerelease::EMPTY;
                             if v.major != 0 {
-                                v.increment_major();
+                                v.major += 1;
+                                v.minor = 0;
+                                v.patch = 0;
                             } else if v.minor != 0 {
-                                v.increment_minor();
+                                v.minor += 1;
+                                v.patch = 0;
                             } else {
                                 // 0.0.x means each patch is breaking, see:
                                 // https://doc.rust-lang.org/cargo/reference/semver.html#change-categories
 
                                 v.patch += 1;
                                 // no helper, have to reset the metadata ourselves
-                                v.build = Vec::new();
-                                v.pre = Vec::new();
+                                v.build = BuildMetadata::EMPTY;
+                                v.pre = Prerelease::EMPTY;
                             }
                             Some(v)
                         },
@@ -718,27 +729,30 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                     pre_tag,
                 } => {
                     let predicate = make_pkg_predicate(&ws, pkg_opts)?;
-                    let pre_val =
-                        pre_tag.unwrap_or_else(|| Identifier::AlphaNumeric("dev".to_owned()));
+                    let pre_val = pre_tag.unwrap_or_else(|| "dev".to_owned());
                     commands::set_version(
                         &ws,
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
                             if v.major != 0 {
-                                v.increment_major();
+                                v.major += 1;
+                                v.minor = 0;
+                                v.patch = 0
                             } else if v.minor != 0 {
-                                v.increment_minor();
+                                v.minor += 1;
+                                v.patch = 0;
                             } else {
                                 // 0.0.x means each patch is breaking, see:
                                 // https://doc.rust-lang.org/cargo/reference/semver.html#change-categories
 
                                 v.patch += 1;
                                 // no helper, have to reset the metadata ourselves
-                                v.build = Vec::new();
+                                v.build = BuildMetadata::EMPTY;
                             }
                             // force the pre
-                            v.pre = vec![pre_val.clone()];
+                            v.pre = Prerelease::new(&pre_val.clone())
+                                .expect("Static or expected to work");
                             Some(v)
                         },
                         force_update,
@@ -755,7 +769,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = vec![pre.clone()];
+                            v.pre = Prerelease::new(&pre.clone())
+                                .expect("Static or expected to work");
                             Some(v)
                         },
                         force_update,
@@ -772,7 +787,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.build = vec![meta.clone()];
+                            v.build = BuildMetadata::new(&meta.clone())
+                                .expect("The meta you provided couldn't be parsed");
                             Some(v)
                         },
                         force_update,
@@ -788,8 +804,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                         |p| predicate(p),
                         |p| {
                             let mut v = p.version().clone();
-                            v.pre = vec![];
-                            v.build = vec![];
+                            v.pre = Prerelease::EMPTY;
+                            v.build = BuildMetadata::EMPTY;
                             Some(v)
                         },
                         force_update,

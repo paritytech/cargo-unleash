@@ -48,7 +48,7 @@ where
         .expect("Updating from remote registry failed :( .");
 
     for m in members.iter() {
-        let dep = Dependency::parse_no_deprecated(
+        let dep = Dependency::parse(
             m.name(),
             Some(&m.version().to_string()),
             registry.source_id(),

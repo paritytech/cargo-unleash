@@ -1,7 +1,10 @@
 use crate::commands::add_owner;
 use cargo::{
-    core::{package::Package, Workspace},
-    ops::{publish, PublishOpts},
+    core::{
+        package::Package, Workspace,
+        resolver::features::CliFeatures
+    },
+    ops::{self, publish, PublishOpts},
 };
 use std::error::Error;
 use std::{thread, time::Duration};
@@ -20,13 +23,16 @@ pub fn release(
         dry_run,
         config: c,
         allow_dirty: true,
-        all_features: false,
-        no_default_features: false,
         index: None,
         jobs: None,
+        to_publish: ops::Packages::Default,
         targets: Default::default(),
         registry: None,
-        features: Default::default(),
+        cli_features: CliFeatures {
+            features: Default::default(),
+            all_features: false,
+            uses_default_features: true,
+        }
     };
 
     let delay = {
