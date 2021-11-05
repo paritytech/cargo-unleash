@@ -454,10 +454,10 @@ fn make_pkg_predicate(
             if skip.iter().any(|r| r.is_match(&name)) {
                 return false;
             }
-            if !p.version().pre.is_empty() {
-                if ignore_pre_version.contains(&p.version().pre.as_str().to_owned()) {
-                    return false;
-                }
+            if !p.version().pre.is_empty()
+                && ignore_pre_version.contains(&p.version().pre.as_str().to_owned())
+            {
+                return false;
             }
         }
 
@@ -610,30 +610,27 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                             let mut v = p.version().clone();
                             if v.pre.is_empty() {
                                 v.pre = Prerelease::new("1").expect("Static will work");
+                            } else if let Ok(num) = v.pre.as_str().parse::<u32>() {
+                                v.pre = Prerelease::new(&format!("{}", num + 1))
+                                    .expect("Knwon to work");
                             } else {
-                                if let Ok(num) = v.pre.as_str().parse::<u32>() {
-                                    v.pre = Prerelease::new(&format!("{}", num + 1))
-                                        .expect("Knwon to work");
+                                let mut items = v
+                                    .pre
+                                    .as_str()
+                                    .split(".")
+                                    .map(|s| s.to_string())
+                                    .collect::<Vec<_>>();
+                                if let Some(num) = items.last().and_then(|u| u.parse::<u32>().ok())
+                                {
+                                    let _ = items.pop();
+                                    items.push(format!("{}", num + 1).to_owned());
                                 } else {
-                                    let mut items = v
-                                        .pre
-                                        .as_str()
-                                        .split(".")
-                                        .map(|s| s.to_string())
-                                        .collect::<Vec<_>>();
-                                    if let Some(num) =
-                                        items.last().and_then(|u| u.parse::<u32>().ok())
-                                    {
-                                        let _ = items.pop();
-                                        items.push(format!("{}", num + 1).to_owned());
-                                    } else {
-                                        items.push("1".to_owned());
-                                    }
-                                    if let Ok(pre) = Prerelease::new(&items.join(".")) {
-                                        v.pre = pre;
-                                    } else {
-                                        return None;
-                                    }
+                                    items.push("1".to_owned());
+                                }
+                                if let Ok(pre) = Prerelease::new(&items.join(".")) {
+                                    v.pre = pre;
+                                } else {
+                                    return None;
                                 }
                             }
                             Some(v)
