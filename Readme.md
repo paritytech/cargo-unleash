@@ -1,4 +1,4 @@
-# cargo [unleash em 🐉](https://github.com/gnunicorn/cargo-unleash)
+# cargo [unleash em 🐉](https://github.com/paritytech/cargo-unleash)
 
 `cargo` release automation tooling for _massiv mono-repo_. Developed primarily for [Parity Substrate](https://github.com/paritytech/substrate).
 
@@ -10,7 +10,7 @@ see [Changelog.md](./Changelog.md)
 
 Use `cargo install` to install:
 ```bash
-cargo install cargo-unleash --version 1.0.0-alpha.11
+cargo install cargo-unleash --version 1.0.0-alpha.13
 ```
 
 ## Usage
@@ -106,6 +106,9 @@ FLAGS:
             Do not disable dev-dependencies
 
             By default we disable dev-dependencies before the run.
+        --include-pre-deps
+            Even if not selected by default, also include depedencies with a pre (cascading)
+
         --no-check
             dry run
 
@@ -117,6 +120,12 @@ OPTIONS:
         --owner <add-owner>
             Ensure we have the owner set as well
 
+    -c, --changed-since <changed-since>
+            Automatically detect the packages, which changed compared to the given git commit.
+
+            Compares the current git `head` to the reference given, identifies which files changed and attempts to
+            identify the packages and its dependents through that mechanism. You can use any `tag`, `branch` or
+            `commit`, but you must be sure it is available (and up to date) locally.
     -i, --ignore-pre-version <ignore-pre-version>...
             Ignore version pre-releases
 
@@ -144,6 +153,11 @@ OPTIONS:
 cargo-unleash em-dragons --ignore-pre-version dev
 ```
 
+**Check if a PR can be released** (checking only changes in the PR compared to `main`)
+```bash
+cargo-unleash check --changed-since=main
+```
+
 **Release all crates** not having `test` in the name
 ```bash
 cargo-unleash em-dragons --skip test
@@ -164,6 +178,8 @@ cargo-unleash version bump-pre
 _You are using the tooling and want to be mentioned here–[create an issue](https://github.com/gnunicorn/cargo-unleash/issues/new)_
 
  - [Parity Substrate](https://github.com/paritytech/substrate) automatic releasing via [Gitlab CI](https://github.com/paritytech/substrate/blob/master/.gitlab-ci.yml)
+ - [Parity SS58-registry](https://github.com/paritytech/ss58-registry) automatic releasing via [Gitlab CI](https://github.com/paritytech/ss58-registry/blob/main/.gitlab-ci.yml)
+ - [Juice](https://github.com/spearow/juice)
 
 ## License & Credits
 
