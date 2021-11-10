@@ -40,13 +40,13 @@ checksum = "eab1c04a571841102f5345a8fc0f6bb3d31c315dec879b5c6e42e40ce7ffa34e"
 
 [[package]]
 name = "assert_cmd"
-version = "1.0.3"
+version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2475b58cd94eb4f70159f4fd8844ba3b807532fe3131b3373fae060bbe30396"
+checksum = "c98233c6673d8601ab23e77eb38f999c51100d46c5703b17288c57fddf3a1ffe"
 dependencies = [
  "bstr",
  "doc-comment",
- "predicates",
+ "predicates 2.0.3",
  "predicates-core",
  "predicates-tree",
  "wait-timeout",
@@ -54,13 +54,13 @@ dependencies = [
 
 [[package]]
 name = "assert_fs"
-version = "1.0.1"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3203d5bb9979ac7210f01a150578ebafef6f08b55e79f6db32673c0977b94340"
+checksum = "633ff1df0788db09e2087fb93d05974e93acb886ac3aec4e67be1d6932e360e4"
 dependencies = [
  "doc-comment",
  "globwalk",
- "predicates",
+ "predicates 2.0.3",
  "predicates-core",
  "predicates-tree",
  "tempfile",
@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-unleash"
-version = "1.0.0-alpha.12"
+version = "1.0.0-alpha.dev"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -217,7 +217,7 @@ dependencies = [
  "lazy_static",
  "log",
  "petgraph",
- "predicates",
+ "predicates 1.0.8",
  "regex",
  "semver",
  "sha1",
@@ -426,6 +426,12 @@ name = "difference"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
+
+[[package]]
+name = "difflib"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
 
 [[package]]
 name = "doc-comment"
@@ -968,15 +974,26 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 
 [[package]]
 name = "predicates"
-version = "1.0.7"
+version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eeb433456c1a57cc93554dea3ce40b4c19c4057e41c55d4a0f3d84ea71c325aa"
+checksum = "f49cfaf7fdaa3bfacc6fa3e7054e65148878354a5cfddcf661df4c851f8021df"
 dependencies = [
  "difference",
  "float-cmp",
  "normalize-line-endings",
  "predicates-core",
  "regex",
+]
+
+[[package]]
+name = "predicates"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c6ce811d0b2e103743eec01db1c50612221f173084ce2f7941053e94b6bb474"
+dependencies = [
+ "difflib",
+ "itertools",
+ "predicates-core",
 ]
 
 [[package]]
@@ -987,12 +1004,12 @@ checksum = "57e35a3326b75e49aa85f5dc6ec15b41108cf5aee58eabb1f274dd18b73c2451"
 
 [[package]]
 name = "predicates-tree"
-version = "1.0.2"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f553275e5721409451eb85e15fd9a860a6e5ab4496eb215987502b5f5391f2"
+checksum = "338c7be2905b732ae3984a2f40032b5e94fd8f52505b186c7d4d68d193445df7"
 dependencies = [
  "predicates-core",
- "treeline",
+ "termtree",
 ]
 
 [[package]]
@@ -1349,6 +1366,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "termtree"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13a4ec180a2de59b57434704ccfad967f789b12737738798fa08798cd5824c16"
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1431,12 +1454,6 @@ dependencies = [
  "combine",
  "linked-hash-map",
 ]
-
-[[package]]
-name = "treeline"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7f741b240f1a48843f9b8e0444fb55fb2a4ff67293b50a9179dfd5ea67f8d41"
 
 [[package]]
 name = "typenum"
