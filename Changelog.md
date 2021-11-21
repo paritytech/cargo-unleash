@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog].
 [Keep a Changelog]: http://keepachangelog.com/en/1.0.0/
 
 ## Unreleased
--
+- Migrated to 2021 edition, enforcing MSRV of `1.56.1`. [#58](https://github.com/paritytech/cargo-unleash/pull/58)
 
 ## 1.0.0-alpha.13 - 2021-10-11
 - Update to cargo 0.57 and semver 1.0 – support for `edition = "2021"`
