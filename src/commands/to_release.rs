@@ -106,13 +106,37 @@ where
         }
     }
 
-    let indices = petgraph::algo::toposort(&graph, None).map_err(|c| {
-        anyhow::anyhow!(
-            "Cycle detected: {:}",
-            graph.node_weight(c.node_id()).unwrap().name()
-        )
-    })?;
-    let packages = indices
+    // cannot use `toposort` for graphs that are cyclic in a undirected sense
+    // but are not in a directed way
+    // TODO check if this is a bug in the toposort impl
+    let mut cycles = vec![];
+    let mut toposorted_indices = vec![];
+    let strongly_connected_sets = petgraph::algo::kosaraju_scc(&graph);
+    for strongly_connected in strongly_connected_sets {
+        match strongly_connected.len() {
+            0 => unreachable!("Strongly connected components are at least size 1. qed"),
+            1 => toposorted_indices.push(strongly_connected[0].clone()),
+            _ => cycles.push(strongly_connected),
+        }
+    }
+    if !cycles.is_empty() {
+        assert!(petgraph::algo::is_cyclic_directed(&graph));
+        let cycles = cycles
+            .iter()
+            .map(|x| {
+                x.iter()
+                    .map(|i| graph.node_weight(*i).unwrap())
+                    .map(|pkg| pkg.name())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        anyhow::bail!("Contains cycles: {:?}", cycles);
+    }
+
+    // reverse in place, the output of `scc_karaju` is in reverse order
+    toposorted_indices.reverse();
+
+    let packages = toposorted_indices
         .into_iter()
         .map(|i| graph.node_weight(i).unwrap().clone())
         .rev()
