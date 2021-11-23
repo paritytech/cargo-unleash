@@ -2,10 +2,10 @@
 use crate::commands::readme;
 
 use crate::util::{edit_each_dep, DependencyAction, DependencyEntry};
+use anyhow::Context;
 use cargo::{
     core::{
         compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor},
-        manifest::ManifestMetadata,
         package::Package,
         resolver::features::CliFeatures,
         Feature, SourceId, Workspace,
@@ -18,7 +18,6 @@ use flate2::read::GzDecoder;
 use log::error;
 use std::{
     collections::HashMap,
-    error::Error,
     fs::{read_to_string, write},
     sync::Arc,
 };
@@ -28,7 +27,7 @@ use toml_edit::{decorated, Document, Item, Value};
 fn inject_replacement(
     pkg: &Package,
     replace: &HashMap<String, String>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), anyhow::Error> {
     let manifest = pkg.manifest_path();
 
     let document = read_to_string(manifest)?;
@@ -51,8 +50,8 @@ fn inject_replacement(
             DependencyAction::Untouched
         }
     });
-    write(manifest, document.to_string().as_bytes())
-        .map_err(|e| format!("Could not write local manifest: {}", e).into())
+    write(manifest, document.to_string().as_bytes()).context("Could not write local manifest")?;
+    Ok(())
 }
 
 fn run_check<'a>(
@@ -61,7 +60,7 @@ fn run_check<'a>(
     opts: &PackageOpts<'_>,
     build_mode: CompileMode,
     replace: &HashMap<String, String>,
-) -> Result<Workspace<'a>, Box<dyn Error>> {
+) -> Result<Workspace<'a>, anyhow::Error> {
     let config = ws.config();
     let pkg = ws.current()?;
 
@@ -133,20 +132,19 @@ fn run_check<'a>(
     let ws_fingerprint = src.last_modified_file(ws.current()?)?;
     if pkg_fingerprint != ws_fingerprint {
         let (_, path) = ws_fingerprint;
-        return Err(format!(
+        anyhow::bail!(
             "Source directory was modified by build.rs during cargo publish. \
              Build scripts should not modify anything outside of OUT_DIR.\n\
              {:?}\n\n\
              To proceed despite this, pass the `--no-verify` flag.",
             path
-        )
-        .into());
+        );
     }
 
     Ok(ws)
 }
 
-fn check_dependencies(package: &Package) -> Result<(), String> {
+fn check_dependencies(package: &Package) -> Result<(), anyhow::Error> {
     let git_deps = package
         .dependencies()
         .iter()
@@ -154,7 +152,11 @@ fn check_dependencies(package: &Package) -> Result<(), String> {
         .map(|d| format!("{:}", d.package_name()))
         .collect::<Vec<_>>();
     if !git_deps.is_empty() {
-        Err(git_deps.join(", "))
+        anyhow::bail!(
+            "{}: has dependencies defined as git without a version: {:}",
+            package.name(),
+            git_deps.join(", ")
+        )
     } else {
         Ok(())
     }
@@ -162,7 +164,8 @@ fn check_dependencies(package: &Package) -> Result<(), String> {
 
 // ensure metadata is set
 // https://doc.rust-lang.org/cargo/reference/publishing.html#before-publishing-a-new-crate
-fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
+fn check_metadata(package: &Package) -> Result<(), anyhow::Error> {
+    let metadata = package.manifest().metadata();
     let mut bad_fields = Vec::new();
     if metadata.authors.is_empty() {
         bad_fields.push("authors is empty")
@@ -186,18 +189,22 @@ fn check_metadata(metadata: &ManifestMetadata) -> Result<(), String> {
     if bad_fields.is_empty() {
         Ok(())
     } else {
-        Err(bad_fields.join("; "))
+        anyhow::bail!(
+            "{}: Bad metadata: {}",
+            package.name(),
+            bad_fields.join("; ")
+        )
     }
 }
 
 #[cfg(feature = "gen-readme")]
-fn check_readme<'a>(ws: &Workspace<'a>, pkg: &Package) -> Result<(), String> {
+fn check_readme<'a>(ws: &Workspace<'a>, pkg: &Package) -> Result<(), anyhow::Error> {
     let pkg_path = pkg.manifest_path().parent().expect("Folder exists");
     readme::check_pkg_readme(ws, pkg_path, pkg.manifest())
 }
 
 #[cfg(not(feature = "gen-readme"))]
-fn check_readme<'a>(_ws: &Workspace<'a>, _pkg: &Package) -> Result<(), String> {
+fn check_readme<'a>(_ws: &Workspace<'a>, _pkg: &Package) -> Result<(), anyhow::Error> {
     unreachable!()
 }
 
@@ -206,7 +213,7 @@ pub fn check<'a>(
     ws: &Workspace<'a>,
     build: bool,
     check_readme: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), anyhow::Error> {
     let c = ws.config();
 
     // FIXME: make build config configurable
@@ -230,26 +237,21 @@ pub fn check<'a>(
     c.shell().status("Checking", "Metadata & Dependencies")?;
 
     let errors = packages.iter().fold(Vec::new(), |mut res, pkg| {
-        if let Err(e) = check_metadata(pkg.manifest().metadata()) {
-            res.push(format!("{:}: Bad metadata: {:}", pkg.name(), e));
+        if let Err(e) = check_metadata(pkg) {
+            res.push(e);
         }
         if let Err(e) = check_dependencies(pkg) {
-            res.push(format!(
-                "{:}: has dependencies defined as git without a version: {:}",
-                pkg.name(),
-                e
-            ));
+            res.push(e);
         }
         res
     });
 
     errors.iter().for_each(|s| error!("{:#?}", s));
     if !errors.is_empty() {
-        return Err(format!(
+        anyhow::bail!(
             "Soft checkes failed with {} errors (see above)",
             errors.len()
         )
-        .into());
     }
 
     if check_readme {
@@ -267,35 +269,30 @@ pub fn check<'a>(
 
         errors.iter().for_each(|s| error!("{:#?}", s));
         if !errors.is_empty() {
-            return Err(format!(
+            anyhow::bail!(
                 "{} readme file(s) need to be updated (see above).",
                 errors.len()
-            )
-            .into());
+            );
         }
     }
 
     let builds = packages.iter().map(|pkg| {
-        check_metadata(pkg.manifest().metadata())
-            .map_err(|e| format!("{:}: Bad metadata: {:}", pkg.name(), e))?;
+        check_metadata(pkg)?;
 
-        let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)
-            .map_err(|e| format!("{:}", e))?;
-        c.shell()
-            .status("Packing", &pkg)
-            .map_err(|e| format!("{:}", e))?;
+        let pkg_ws = Workspace::ephemeral(pkg.clone(), c, Some(ws.target_dir()), true)?;
+        c.shell().status("Packing", &pkg)?;
         match package(&pkg_ws, &opts) {
             Ok(Some(mut rw_lock)) if rw_lock.len() == 1 => {
                 Ok((pkg_ws, rw_lock.pop().expect("we checked the counter")))
             }
-            Ok(Some(_rw_lock)) => Err(format!(
+            Ok(Some(_rw_lock)) => Err(anyhow::anyhow!(
                 "Packing {:} produced more than one package",
                 pkg.name()
             )),
-            Ok(None) => Err(format!("Failure packing {:}", pkg.name())),
+            Ok(None) => Err(anyhow::anyhow!("Failure packing {:}", pkg.name())),
             Err(e) => {
                 cargo::display_error(&e, &mut c.shell());
-                Err(format!("Failure packing {:}: {}", pkg.name(), e))
+                Err(anyhow::anyhow!("Failure packing {:}: {}", pkg.name(), e))
             }
         }
     });
@@ -306,7 +303,7 @@ pub fn check<'a>(
         error!("{:#?}", e);
     }
     if !errors.is_empty() {
-        return Err(format!("Packing failed with {} errors (see above)", errors.len()).into());
+        anyhow::bail!("Packing failed with {} errors (see above)", errors.len());
     };
 
     let build_mode = if build {

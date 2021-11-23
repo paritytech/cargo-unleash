@@ -1,7 +1,7 @@
 use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry};
 use cargo::core::{package::Package, Workspace};
 use log::trace;
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 use toml_edit::{decorated, Item, Value};
 
 fn check_for_update(
@@ -43,7 +43,7 @@ fn check_for_update(
 
 /// For packages matching predicate set to mapper given version, if any. Update all members dependencies
 /// if necessary.
-pub fn rename<M, P>(ws: &Workspace<'_>, predicate: P, mapper: M) -> Result<(), Box<dyn Error>>
+pub fn rename<M, P>(ws: &Workspace<'_>, predicate: P, mapper: M) -> Result<(), anyhow::Error>
 where
     P: Fn(&Package) -> bool,
     M: Fn(&Package) -> Option<String>,

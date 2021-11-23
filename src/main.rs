@@ -1,4 +1,3 @@
-use std::error::Error;
 use structopt::StructOpt;
 mod cli;
 mod commands;
@@ -6,7 +5,7 @@ mod util;
 
 use cli::Opt;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), anyhow::Error> {
     let mut argv = Vec::new();
     let mut args = std::env::args();
     argv.extend(args.next());
