@@ -9,7 +9,7 @@ pub fn add_owner(
     package: &Package,
     new_owner: String,
     token: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), anyhow::Error> {
     if let Err(e) = modify_owners(
         c,
         &OwnersOptions {
@@ -24,7 +24,7 @@ pub fn add_owner(
     ) {
         let msg = e.to_string();
         if !msg.ends_with("is already an owner") {
-            return Err(msg);
+            anyhow::bail!(msg)
         }
 
         c.shell()

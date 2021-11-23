@@ -1,3 +1,4 @@
+use anyhow::Context;
 use cargo::{
     core::{package::Package, Verbosity, Workspace},
     util::{config::Config as CargoConfig, interning::InternedString},
@@ -6,7 +7,7 @@ use flexi_logger::Logger;
 use log::trace;
 use regex::Regex;
 use semver::{BuildMetadata, Prerelease, Version};
-use std::{error::Error, fs, path::PathBuf, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
 use structopt::clap::arg_enum;
 use structopt::StructOpt;
 use toml_edit::Value;
@@ -14,8 +15,8 @@ use toml_edit::Value;
 use crate::commands;
 use crate::util;
 
-fn parse_regex(src: &str) -> Result<Regex, String> {
-    Regex::new(src).map_err(|e| format!("Parsing Regex failed: {:}", e))
+fn parse_regex(src: &str) -> Result<Regex, anyhow::Error> {
+    Regex::new(src).context("Parsing Regex failed")
 }
 
 arg_enum! {
@@ -391,7 +392,7 @@ pub struct Opt {
 fn make_pkg_predicate(
     ws: &Workspace<'_>,
     args: PackageSelectOptions,
-) -> Result<impl Fn(&Package) -> bool, String> {
+) -> Result<impl Fn(&Package) -> bool, anyhow::Error> {
     let PackageSelectOptions {
         packages,
         skip,
@@ -403,13 +404,12 @@ fn make_pkg_predicate(
 
     if !packages.is_empty() {
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
-            return Err(
+            anyhow::bail!(
                 "-p/--packages is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
-                    .into(),
             );
         }
         if changed_since.is_some() {
-            return Err("-p/--packages is mutually exlusive to using -c/--changed-since".into());
+            anyhow::bail!("-p/--packages is mutually exlusive to using -c/--changed-since");
         }
     }
 
@@ -425,9 +425,8 @@ fn make_pkg_predicate(
 
     let changed = if let Some(changed_since) = &changed_since {
         if !skip.is_empty() || !ignore_pre_version.is_empty() {
-            return Err(
-                "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre"
-                    .into(),
+            anyhow::bail!(
+                "-c/--changed-since is mutually exlusive to using -s/--skip and -i/--ignore-version-pre",
             );
         }
         Some(util::changed_packages(ws, changed_since)?)
@@ -465,21 +464,21 @@ fn make_pkg_predicate(
     })
 }
 
-fn verify_readme_feature() -> Result<(), String> {
+fn verify_readme_feature() -> Result<(), anyhow::Error> {
     if cfg!(feature = "gen-readme") {
         Ok(())
     } else {
-        Err("Readme related functionalities not available. Please re-install with gen-readme feature.".to_owned())
+        anyhow::bail!("Readme related functionalities not available. Please re-install with gen-readme feature.")
     }
 }
 
-pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
+pub fn run(args: Opt) -> Result<(), anyhow::Error> {
     let _ = Logger::with_str(args.log.clone()).start();
     let mut c = CargoConfig::default().expect("Couldn't create cargo config");
     c.values()?;
     c.load_credentials()?;
 
-    let get_token = |t| -> Result<Option<String>, Box<dyn Error>> {
+    let get_token = |t| -> Result<Option<String>, anyhow::Error> {
         Ok(match t {
             None => c.get_string("registry.token")?.map(|x| x.val),
             _ => t,
@@ -508,21 +507,20 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
         c.shell()
             .status("Preparing", "Disabling Dev Dependencies")?;
 
-        let ws = Workspace::new(&root_manifest, &c)
-            .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
+        let ws = Workspace::new(&root_manifest, &c).context("Reading workspace failed")?;
+
         commands::deactivate_dev_dependencies(
             ws.members()
                 .filter(|p| predicate(p) && c.shell().status("Patching", p.name()).is_ok()),
         )
     };
 
+    let ws = Workspace::new(&root_manifest, &c).context("Reading workspace failed")?;
     match args.cmd {
         Command::CleanDeps {
             pkg_opts,
             check_only,
         } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             commands::clean_up_unused_dependencies(&ws, predicate, check_only)
         }
@@ -531,8 +529,6 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             token,
             pkg_opts,
         } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let t = get_token(token)?;
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
 
@@ -548,12 +544,8 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             pkg_opts,
         } => {
             if name == "name" {
-                return Err("To change the name please use the rename command!".into());
+                anyhow::bail!("To change the name please use the rename command!");
             }
-
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             let type_value = {
                 if let Ok(v) = bool::from_str(&value) {
@@ -577,13 +569,9 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             let predicate = |p: &Package| p.name().to_string().trim() == old_name;
             let renamer = |_p: &Package| Some(new_name.clone());
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             commands::rename(&ws, predicate, renamer)
         }
         Command::Version { cmd } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             match cmd {
                 VersionCommand::Set {
                     pkg_opts,
@@ -814,25 +802,19 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Command::DeDevDeps { pkg_opts } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-            maybe_patch(false, &make_pkg_predicate(&ws, pkg_opts)?)
-        }
+        Command::DeDevDeps { pkg_opts } => maybe_patch(false, &make_pkg_predicate(&ws, pkg_opts)?),
         Command::ToRelease {
             include_dev,
             pkg_opts,
             empty_is_failure,
         } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
-                    return Err("No Packages matching criteria. Exiting".into());
+                    anyhow::bail!("No Packages matching criteria. Exiting");
                 } else {
                     println!("No packages selected. All good. Exiting.");
                     return Ok(());
@@ -860,16 +842,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
                 verify_readme_feature()?;
             }
 
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
-                    return Err("No Packages matching criteria. Exiting".into());
+                    anyhow::bail!("No Packages matching criteria. Exiting");
                 } else {
                     println!("No packages selected. All good. Exiting.");
                     return Ok(());
@@ -884,16 +863,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             readme_mode,
             empty_is_failure,
         } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
-
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(false, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
-                    return Err("No Packages matching criteria. Exiting".into());
+                    anyhow::bail!("No Packages matching criteria. Exiting");
                 } else {
                     println!("No packages selected. All good. Exiting.");
                     return Ok(());
@@ -913,15 +889,13 @@ pub fn run(args: Opt) -> Result<(), Box<dyn Error>> {
             check_readme,
             empty_is_failure,
         } => {
-            let ws = Workspace::new(&root_manifest, &c)
-                .map_err(|e| format!("Reading workspace {:?} failed: {:}", root_manifest, e))?;
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate)?;
             if packages.is_empty() {
                 if empty_is_failure {
-                    return Err("No Packages matching criteria. Exiting".into());
+                    anyhow::bail!("No Packages matching criteria. Exiting");
                 } else {
                     println!("No packages selected. All good. Exiting.");
                     return Ok(());

@@ -1,6 +1,6 @@
 use crate::util::edit_each;
 use cargo::core::package::Package;
-use std::error::Error;
+
 use toml_edit::{decorated, Item, Table, Value};
 
 /// Deactivate the Dev Dependencies Section of the given toml
@@ -9,7 +9,7 @@ pub fn set_field<'a, I>(
     root_key: String,
     key: String,
     value: Value,
-) -> Result<(), Box<dyn Error>>
+) -> Result<(), anyhow::Error>
 where
     I: Iterator<Item = &'a Package>,
 {
@@ -22,12 +22,11 @@ where
             if let Item::Table(inner) = t {
                 inner
             } else {
-                return Err(format!(
+                anyhow::bail!(
                     "Error in manifest of {:}: root key {:} is not a table.",
                     p.name(),
                     root_key
-                )
-                .into());
+                );
             }
         };
         let entry = table.entry(&key);

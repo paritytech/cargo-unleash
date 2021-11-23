@@ -1,38 +1,38 @@
+use anyhow::Context;
 use cargo::{
     core::{package::Package, Workspace},
     sources::PathSource,
 };
 use git2::Repository;
 use log::{trace, warn};
-use std::{collections::HashSet, error::Error, fs};
+use std::{collections::HashSet, fs};
 use toml_edit::{Document, InlineTable, Item, Table, Value};
 
 pub fn changed_packages<'a>(
     ws: &'a Workspace,
     reference: &str,
-) -> Result<HashSet<Package>, String> {
+) -> Result<HashSet<Package>, anyhow::Error> {
     ws.config()
         .shell()
         .status("Calculating", format!("git diff since {:}", reference))
         .expect("Writing to Shell doesn't fail");
 
     let path = ws.root();
-    let repo =
-        Repository::open(&path).map_err(|e| format!("Workspace isn't a git repo: {:?}", e))?;
+    let repo = Repository::open(&path).context("Workspace isn't a git repo")?;
     let current_head = repo
         .head()
         .and_then(|b| b.peel_to_commit())
         .and_then(|c| c.tree())
-        .map_err(|e| format!("Could not determine current git HEAD: {:?}", e))?;
+        .context("Could not determine current git HEAD")?;
     let main = repo
         .resolve_reference_from_short_name(reference)
         .and_then(|d| d.peel_to_commit())
         .and_then(|c| c.tree())
-        .map_err(|e| format!("Reference not found in git repository: {:?}", e))?;
+        .context("Reference not found in git repository")?;
 
     let diff = repo
         .diff_tree_to_tree(Some(&current_head), Some(&main), None)
-        .map_err(|e| format!("Diffing failed: {:?}", e))?;
+        .context("Diffing failed")?;
 
     let files = diff
         .deltas()
@@ -82,9 +82,9 @@ pub fn members_deep(ws: &'_ Workspace) -> Vec<Package> {
 }
 
 /// Run f on every package's manifest, write the doc. Fail on first error
-pub fn edit_each<'a, I, F, R>(iter: I, f: F) -> Result<Vec<R>, Box<dyn Error>>
+pub fn edit_each<'a, I, F, R>(iter: I, f: F) -> Result<Vec<R>, anyhow::Error>
 where
-    F: Fn(&'a Package, &mut Document) -> Result<R, Box<dyn Error>>,
+    F: Fn(&'a Package, &mut Document) -> Result<R, anyhow::Error>,
     I: Iterator<Item = &'a Package>,
 {
     let mut results = Vec::new();

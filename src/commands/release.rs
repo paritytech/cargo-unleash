@@ -3,7 +3,7 @@ use cargo::{
     core::{package::Package, resolver::features::CliFeatures, Workspace},
     ops::{self, publish, PublishOpts},
 };
-use std::error::Error;
+
 use std::{thread, time::Duration};
 
 pub fn release(
@@ -12,7 +12,7 @@ pub fn release(
     dry_run: bool,
     token: Option<String>,
     owner: Option<String>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), anyhow::Error> {
     let c = ws.config();
     let opts = PublishOpts {
         verify: false,

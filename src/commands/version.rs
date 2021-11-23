@@ -1,8 +1,9 @@
 use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry};
+use anyhow::Context;
 use cargo::core::{package::Package, Workspace};
 use log::trace;
 use semver::{Version, VersionReq};
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 use toml_edit::{decorated, Item, Value};
 
 fn check_for_update(
@@ -28,10 +29,8 @@ fn check_for_update(
             if let Some(v_req) = info.get_mut("version") {
                 let r = v_req
                     .as_str()
-                    .ok_or_else(|| "Version must be string".to_owned())
-                    .and_then(|s| {
-                        VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e))
-                    })
+                    .ok_or_else(|| anyhow::anyhow!("Version must be string"))
+                    .and_then(|s| VersionReq::parse(s).context("Parsing failed"))
                     .expect("Cargo enforces us using semver versions. qed");
                 if force_update || !r.matches(new_version) {
                     trace!("Versions don't match anymore, updating.");
@@ -59,10 +58,8 @@ fn check_for_update(
                 if let Some(v_req) = info.get("version") {
                     let r = v_req
                         .as_str()
-                        .ok_or_else(|| "Version must be string".to_owned())
-                        .and_then(|s| {
-                            VersionReq::parse(s).map_err(|e| format!("Parsing failed {:}", e))
-                        })
+                        .ok_or_else(|| anyhow::anyhow!("Version must be string"))
+                        .and_then(|s| VersionReq::parse(s).context("Parsing failed"))
                         .expect("Cargo enforces us using semver versions. qed");
                     if !force_update && r.matches(new_version) {
                         return DependencyAction::Untouched;
@@ -87,7 +84,7 @@ pub fn set_version<M, P>(
     predicate: P,
     mapper: M,
     force_update: bool,
-) -> Result<(), Box<dyn Error>>
+) -> Result<(), anyhow::Error>
 where
     P: Fn(&Package) -> bool,
     M: Fn(&Package) -> Option<Version>,

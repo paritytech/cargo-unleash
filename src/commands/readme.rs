@@ -47,15 +47,14 @@ pub fn check_pkg_readme<'a>(
     ws: &Workspace<'a>,
     pkg_path: &Path,
     pkg_manifest: &Manifest,
-) -> Result<(), String> {
+) -> Result<(), anyhow::Error> {
     let c = ws.config();
 
     let mut pkg_source = find_entrypoint(pkg_path)?;
     let readme_path = pkg_path.join("README.md");
 
     c.shell()
-        .status("Checking", format!("Readme for {}", &pkg_manifest.name()))
-        .map_err(|e| format!("{:}", e))?;
+        .status("Checking", format!("Readme for {}", &pkg_manifest.name()))?;
 
     let pkg_readme = fs::read_to_string(readme_path.clone());
     match pkg_readme {
@@ -78,7 +77,7 @@ pub fn gen_all_readme<'a>(
     packages: Vec<Package>,
     ws: &Workspace<'a>,
     readme_mode: GenerateReadmeMode,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), anyhow::Error> {
     let c = ws.config();
     c.shell().status("Generating", "Readme files")?;
     for pkg in packages.into_iter() {
@@ -94,7 +93,7 @@ pub fn gen_pkg_readme<'a>(
     ws: &Workspace<'a>,
     pkg: Package,
     mode: &GenerateReadmeMode,
-) -> Result<(), String> {
+) -> Result<(), anyhow::Error> {
     let c = ws.config();
     let root_path = ws.root();
 
@@ -111,35 +110,31 @@ pub fn gen_pkg_readme<'a>(
     match (mode, pkg_readme) {
         (GenerateReadmeMode::IfMissing, Ok(_existing_readme)) => {
             c.shell()
-                .status("Skipping", format!("{}: Readme already exists.", &pkg_name))
-                .map_err(|e| format!("{:}", e))?;
-            set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
+                .status("Skipping", format!("{}: Readme already exists.", &pkg_name))?;
+            set_readme_field(pkg)?;
             Ok(())
         }
         (mode, existing_res) => {
             let template_path = find_readme_template(&ws.root(), &pkg_path)?;
-            c.shell()
-                .status(
-                    "Generating",
-                    format!(
-                        "Readme for {} (template: {:?})",
-                        &pkg_name,
-                        match &template_path {
-                            Some(p) => p.strip_prefix(&root_path).unwrap_or(p).to_str().unwrap(),
-                            None => "none found",
-                        }
-                    ),
-                )
-                .map_err(|e| format!("{:}", e))?;
+            c.shell().status(
+                "Generating",
+                format!(
+                    "Readme for {} (template: {:?})",
+                    &pkg_name,
+                    match &template_path {
+                        Some(p) => p.strip_prefix(&root_path).unwrap_or(p).to_str().unwrap(),
+                        None => "none found",
+                    }
+                ),
+            )?;
             let new_readme = &mut generate_readme(&pkg_path, &mut pkg_source, template_path)?;
             if mode == &GenerateReadmeMode::Append && existing_res.is_ok() {
                 *new_readme = format!("{}\n{}", existing_res.unwrap(), new_readme);
             }
             let final_readme =
                 &mut rewrite_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
-            let res =
-                fs::write(readme_path, final_readme.as_bytes()).map_err(|e| format!("{:}", e));
-            set_readme_field(pkg).map_err(|e| format!("{:}", e))?;
+            let res = fs::write(readme_path, final_readme.as_bytes());
+            set_readme_field(pkg)?;
             res
         }
     }
@@ -149,11 +144,11 @@ fn generate_readme<'a>(
     pkg_path: &Path,
     pkg_source: &mut File,
     template_path: Option<PathBuf>,
-) -> Result<String, String> {
+) -> Result<String, anyhow::Error> {
     let mut template = template_path
         .map(|p| fs::File::open(&p).expect(&format!("Could not read template at {}", p.display())));
 
-    cargo_readme::generate_readme(
+    let readme_content = cargo_readme::generate_readme(
         pkg_path,
         pkg_source,
         template.as_mut(),
@@ -161,10 +156,11 @@ fn generate_readme<'a>(
         false,
         true,
         false,
-    )
+    )?;
+    Ok(readme_content)
 }
 
-fn set_readme_field(pkg: Package) -> Result<(), Box<dyn Error>> {
+fn set_readme_field(pkg: Package) -> Result<(), anyhow::Error> {
     commands::set_field(
         vec![pkg].iter(),
         "package".to_owned(),

@@ -1,14 +1,14 @@
 use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction};
 use cargo::core::{package::Package, Workspace};
 // use log::trace;
-use std::{error::Error, process::Command};
+use std::process::Command;
 // use toml_edit::{decorated, Item, Value};
 
 pub fn clean_up_unused_dependencies<P>(
     ws: &Workspace<'_>,
     predicate: P,
     check_only: bool,
-) -> Result<(), Box<dyn Error>>
+) -> Result<(), anyhow::Error>
 where
     P: Fn(&Package) -> bool,
 {
@@ -52,13 +52,12 @@ where
     )
     .map(|v| v.iter().sum::<u32>());
 
-    match total {
-        Ok(t) if t > 0 && check_only => Err(format!(
+    match total? {
+        t if t > 0 && check_only => anyhow::bail!(
             "Aborting: {:} unused dependencies found. See shell output for more.",
             t
-        )
-        .into()),
-        Ok(_) => Ok(()),
-        Err(e) => Err(e),
+        ),
+        _ => {}
     }
+    Ok(())
 }
