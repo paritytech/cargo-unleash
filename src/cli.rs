@@ -269,6 +269,11 @@ pub enum Command {
         /// Consider no package matching the criteria an error
         #[structopt(long)]
         empty_is_failure: bool,
+
+        /// Write a graphviz dot of all crates to be release and their depedency relation
+        /// to the given path.
+        #[structopt(long = "dot-graph")]
+        dot_graph: Option<PathBuf>,
     },
     /// Check whether crates can be packaged
     ///
@@ -298,6 +303,10 @@ pub enum Command {
         /// Consider no package matching the criteria an error
         #[structopt(long)]
         empty_is_failure: bool,
+
+        /// Write a graphviz dot file to the given destination
+        #[structopt(long = "dot-graph")]
+        dot_graph: Option<PathBuf>,
     },
     /// Generate Readme files
     ///
@@ -363,6 +372,10 @@ pub enum Command {
         /// Consider no package matching the criteria an error
         #[structopt(long)]
         empty_is_failure: bool,
+
+        /// Write a graphviz dot file to the given destination
+        #[structopt(long = "dot-graph")]
+        dot_graph: Option<PathBuf>,
     },
 }
 
@@ -807,11 +820,12 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             include_dev,
             pkg_opts,
             empty_is_failure,
+            dot_graph,
         } => {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
-            let packages = commands::packages_to_release(&ws, predicate)?;
+            let packages = commands::packages_to_release(&ws, predicate, dot_graph)?;
             if packages.is_empty() {
                 if empty_is_failure {
                     anyhow::bail!("No Packages matching criteria. Exiting");
@@ -837,6 +851,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             pkg_opts,
             check_readme,
             empty_is_failure,
+            dot_graph,
         } => {
             if check_readme {
                 verify_readme_feature()?;
@@ -845,7 +860,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
-            let packages = commands::packages_to_release(&ws, predicate)?;
+            let packages = commands::packages_to_release(&ws, predicate, dot_graph)?;
             if packages.is_empty() {
                 if empty_is_failure {
                     anyhow::bail!("No Packages matching criteria. Exiting");
@@ -866,7 +881,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(false, &predicate)?;
 
-            let packages = commands::packages_to_release(&ws, predicate)?;
+            let packages = commands::packages_to_release(&ws, predicate, None)?;
             if packages.is_empty() {
                 if empty_is_failure {
                     anyhow::bail!("No Packages matching criteria. Exiting");
@@ -888,11 +903,12 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             pkg_opts,
             check_readme,
             empty_is_failure,
+            dot_graph,
         } => {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
             maybe_patch(include_dev, &predicate)?;
 
-            let packages = commands::packages_to_release(&ws, predicate)?;
+            let packages = commands::packages_to_release(&ws, predicate, dot_graph)?;
             if packages.is_empty() {
                 if empty_is_failure {
                     anyhow::bail!("No Packages matching criteria. Exiting");
