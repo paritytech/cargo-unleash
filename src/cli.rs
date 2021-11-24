@@ -512,23 +512,25 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
         fs::canonicalize(path)?
     };
 
-    let maybe_patch = |shouldnt_patch, predicate: &dyn Fn(&Package) -> bool| {
-        if shouldnt_patch {
-            return Ok(());
-        }
-
-        c.shell()
-            .status("Preparing", "Disabling Dev Dependencies")?;
-
-        let ws = Workspace::new(&root_manifest, &c).context("Reading workspace failed")?;
-
-        commands::deactivate_dev_dependencies(
-            ws.members()
-                .filter(|p| predicate(p) && c.shell().status("Patching", p.name()).is_ok()),
-        )
-    };
-
     let ws = Workspace::new(&root_manifest, &c).context("Reading workspace failed")?;
+
+    let maybe_patch =
+        |ws, shouldnt_patch, predicate: &dyn Fn(&Package) -> bool| -> anyhow::Result<Workspace> {
+            if shouldnt_patch {
+                return Ok(ws);
+            }
+
+            c.shell()
+                .status("Preparing", "Disabling Dev Dependencies")?;
+
+            commands::deactivate_dev_dependencies(
+                ws.members()
+                    .filter(|p| predicate(p) && c.shell().status("Patching", p.name()).is_ok()),
+            )?;
+            // assure to re-read the workspace, otherwise `fn to_release` will still find cycles (rightfully so!)
+            Workspace::new(&root_manifest, &c).context("Reading workspace failed")
+        };
+
     match args.cmd {
         Command::CleanDeps {
             pkg_opts,
@@ -815,7 +817,11 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
                 }
             }
         }
-        Command::DeDevDeps { pkg_opts } => maybe_patch(false, &make_pkg_predicate(&ws, pkg_opts)?),
+        Command::DeDevDeps { pkg_opts } => {
+            let predicate = make_pkg_predicate(&ws, pkg_opts)?;
+            let _ = maybe_patch(ws, false, &predicate)?;
+            Ok(())
+        }
         Command::ToRelease {
             include_dev,
             pkg_opts,
@@ -823,7 +829,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             dot_graph,
         } => {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
+            let ws = maybe_patch(ws, include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate, dot_graph)?;
             if packages.is_empty() {
@@ -858,7 +864,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             }
 
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
+            let ws = maybe_patch(ws, include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate, dot_graph)?;
             if packages.is_empty() {
@@ -879,7 +885,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             empty_is_failure,
         } => {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
-            maybe_patch(false, &predicate)?;
+            let ws = maybe_patch(ws, false, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate, None)?;
             if packages.is_empty() {
@@ -906,7 +912,7 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
             dot_graph,
         } => {
             let predicate = make_pkg_predicate(&ws, pkg_opts)?;
-            maybe_patch(include_dev, &predicate)?;
+            let ws = maybe_patch(ws, include_dev, &predicate)?;
 
             let packages = commands::packages_to_release(&ws, predicate, dot_graph)?;
             if packages.is_empty() {
