@@ -130,7 +130,7 @@ where
     for strongly_connected in strongly_connected_sets {
         match strongly_connected.len() {
             0 => unreachable!("Strongly connected components are at least size 1. qed"),
-            1 => toposorted_indices.push(strongly_connected[0].clone()),
+            1 => toposorted_indices.push(strongly_connected[0]),
             _ => cycles.push(strongly_connected),
         }
     }
