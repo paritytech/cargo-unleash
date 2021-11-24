@@ -4,13 +4,20 @@ use cargo::{
     sources::registry::RegistrySource,
 };
 use log::{trace, warn};
-use petgraph::Graph;
-use std::collections::{HashMap, HashSet};
+use petgraph::dot::{self, Dot};
+use petgraph::{Directed, Graph};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::OpenOptions,
+    io::Write,
+    path::PathBuf,
+};
 
 /// Generate the packages we should be releasing
 pub fn packages_to_release<F>(
     ws: &Workspace<'_>,
     predicate: F,
+    write_dot_graph: Option<PathBuf>,
 ) -> Result<Vec<Package>, anyhow::Error>
 where
     F: Fn(&Package) -> bool,
@@ -21,7 +28,7 @@ where
         .status("Resolving", "Dependency Tree")
         .expect("Writing to Shell doesn't fail");
 
-    let mut graph = Graph::<Package, (), _, _>::new();
+    let mut graph = Graph::<Package, (), Directed, u32>::new();
     let members = members_deep(ws);
 
     let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(m));
@@ -106,9 +113,17 @@ where
         }
     }
 
+    if let Some(dest) = write_dot_graph {
+        let mut dest = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(dest)?;
+        graphviz(&graph, &mut dest)?;
+    }
+
     // cannot use `toposort` for graphs that are cyclic in a undirected sense
     // but are not in a directed way
-    // TODO check if this is a bug in the toposort impl
     let mut cycles = vec![];
     let mut toposorted_indices = vec![];
     let strongly_connected_sets = petgraph::algo::kosaraju_scc(&graph);
@@ -143,4 +158,23 @@ where
         .collect::<Vec<_>>();
 
     Ok(packages)
+}
+
+/// Render a graphviz (aka dot graph) to a file.
+fn graphviz(graph: &Graph<Package, ()>, dest: &mut impl Write) -> anyhow::Result<()> {
+    let config = &[dot::Config::EdgeNoLabel, dot::Config::NodeNoLabel][..];
+    let dot = Dot::with_attr_getters(
+        graph,
+        config,
+        &|_graph, _edge_ref| -> String { "".to_owned() },
+        &|_graph, (_idx, pkg)| -> String {
+            format!(
+                r#"label="{}:{}""#,
+                pkg.name().to_string(),
+                pkg.version().to_string().as_str()
+            )
+        },
+    );
+    dest.write_all(format!("{:?}", &dot).as_bytes())?;
+    Ok(())
 }
