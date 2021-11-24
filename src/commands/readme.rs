@@ -1,11 +1,11 @@
 use crate::cli::GenerateReadmeMode;
 use crate::commands;
+use anyhow::{anyhow, bail, Context, Result};
 use cargo::core::{Manifest, Package, Workspace};
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 use sha1::Sha1;
 use std::{
-    error::Error,
     fmt::Display,
     fs::{self, File},
     path::{Path, PathBuf},
@@ -24,7 +24,9 @@ lazy_static! {
 pub enum CheckReadmeResult {
     Skipped,
     Missing,
+    #[allow(dead_code)]
     UpdateNeeded,
+    #[allow(dead_code)]
     UpToDate,
 }
 
@@ -47,7 +49,7 @@ pub fn check_pkg_readme<'a>(
     ws: &Workspace<'a>,
     pkg_path: &Path,
     pkg_manifest: &Manifest,
-) -> Result<(), anyhow::Error> {
+) -> Result<()> {
     let c = ws.config();
 
     let mut pkg_source = find_entrypoint(pkg_path)?;
@@ -66,10 +68,10 @@ pub fn check_pkg_readme<'a>(
             if Sha1::from(pkg_readme) == Sha1::from(new_readme) {
                 Ok(())
             } else {
-                Err(CheckReadmeResult::UpdateNeeded.to_string())
+                bail!(CheckReadmeResult::UpdateNeeded)
             }
         }
-        Err(_err) => Err(CheckReadmeResult::Missing.to_string()),
+        Err(_err) => bail!(CheckReadmeResult::Missing),
     }
 }
 
@@ -77,13 +79,13 @@ pub fn gen_all_readme<'a>(
     packages: Vec<Package>,
     ws: &Workspace<'a>,
     readme_mode: GenerateReadmeMode,
-) -> Result<(), anyhow::Error> {
+) -> Result<()> {
     let c = ws.config();
     c.shell().status("Generating", "Readme files")?;
     for pkg in packages.into_iter() {
         let pkg_name = &pkg.name().clone();
         gen_pkg_readme(ws, pkg, &readme_mode)
-            .map_err(|e| format!("Failure generating Readme for {:}: {}", pkg_name, e))?
+            .context(format!("Failure generating Readme for {:}", pkg_name))?
     }
 
     Ok(())
@@ -93,7 +95,7 @@ pub fn gen_pkg_readme<'a>(
     ws: &Workspace<'a>,
     pkg: Package,
     mode: &GenerateReadmeMode,
-) -> Result<(), anyhow::Error> {
+) -> Result<()> {
     let c = ws.config();
     let root_path = ws.root();
 
@@ -135,7 +137,7 @@ pub fn gen_pkg_readme<'a>(
                 &mut rewrite_doc_links(&pkg_name, &new_readme, doc_uri.map(|x| x.as_str()));
             let res = fs::write(readme_path, final_readme.as_bytes());
             set_readme_field(pkg)?;
-            res
+            Ok(res?)
         }
     }
 }
@@ -144,9 +146,10 @@ fn generate_readme<'a>(
     pkg_path: &Path,
     pkg_source: &mut File,
     template_path: Option<PathBuf>,
-) -> Result<String, anyhow::Error> {
+) -> Result<String> {
     let mut template = template_path
-        .map(|p| fs::File::open(&p).expect(&format!("Could not read template at {}", p.display())));
+        .map(|p| fs::File::open(&p).context(format!("Could not read template at {}", p.display())))
+        .transpose()?;
 
     let readme_content = cargo_readme::generate_readme(
         pkg_path,
@@ -156,7 +159,8 @@ fn generate_readme<'a>(
         false,
         true,
         false,
-    )?;
+    )
+    .map_err(|s| anyhow!(s))?;
     Ok(readme_content)
 }
 
@@ -174,9 +178,10 @@ fn set_readme_field(pkg: Package) -> Result<(), anyhow::Error> {
 /// Try to read entrypoint in the following order:
 /// - src/lib.rs
 /// - src/main.rs
-fn find_entrypoint(current_dir: &Path) -> Result<File, String> {
+fn find_entrypoint(current_dir: &Path) -> Result<File> {
     let entrypoint = find_entrypoint_internal(current_dir)?;
-    File::open(current_dir.join(entrypoint)).map_err(|e| format!("{}", e))
+    let f = File::open(current_dir.join(entrypoint))?;
+    Ok(f)
 }
 #[derive(Debug)]
 struct ManifestLib {
@@ -189,7 +194,7 @@ struct ManifestLib {
 /// Try to read entrypoint in the following order:
 /// - src/lib.rs
 /// - src/main.rs
-fn find_entrypoint_internal(current_dir: &Path) -> Result<PathBuf, String> {
+fn find_entrypoint_internal(current_dir: &Path) -> Result<PathBuf> {
     // try lib.rs
     let lib_rs = current_dir.join("src/lib.rs");
     if lib_rs.exists() {
@@ -203,21 +208,20 @@ fn find_entrypoint_internal(current_dir: &Path) -> Result<PathBuf, String> {
     }
 
     // if no entrypoint is found, return an error
-    Err("No entrypoint found".to_owned())
+    bail!("No entrypoint found".to_owned())
 }
 
 /// Find the template file to be used to generate README files.
 ///
 /// Start from the package's folder & go up until a template is found
 /// (or none).
-fn find_readme_template<'a>(
-    root_path: &'a Path,
-    pkg_path: &'a Path,
-) -> Result<Option<PathBuf>, String> {
+fn find_readme_template<'a>(root_path: &'a Path, pkg_path: &'a Path) -> Result<Option<PathBuf>> {
     let mut cur_path = pkg_path;
     let mut tpl_path = cur_path.join("README.tpl");
     while !tpl_path.exists() && cur_path >= root_path {
-        cur_path = cur_path.parent().unwrap();
+        cur_path = cur_path
+            .parent()
+            .ok_or_else(|| anyhow!("No parent dir of {}", cur_path.display()))?;
         tpl_path = cur_path.join("README.tpl");
     }
     Ok(if tpl_path.exists() {
