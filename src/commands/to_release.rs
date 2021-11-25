@@ -22,6 +22,19 @@ pub fn packages_to_release<F>(
 where
     F: Fn(&Package) -> bool,
 {
+    packages_to_release_inner(ws, predicate, members_deep, write_dot_graph)
+}
+
+fn packages_to_release_inner<'cfg, F, C>(
+    ws: &Workspace<'cfg>,
+    predicate: F,
+    package_collector: C,
+    write_dot_graph: Option<PathBuf>,
+) -> Result<Vec<Package>, anyhow::Error>
+where
+    F: Fn(&Package) -> bool,
+    C: Fn(&Workspace<'cfg>) -> Vec<Package>,
+{
     // inspired by the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
     ws.config()
         .shell()
@@ -29,7 +42,7 @@ where
         .expect("Writing to Shell doesn't fail");
 
     let mut graph = Graph::<Package, (), Directed, u32>::new();
-    let members = members_deep(ws);
+    let members = package_collector(ws);
 
     let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(m));
 
@@ -177,4 +190,120 @@ fn graphviz(graph: &Graph<Package, ()>, dest: &mut impl Write) -> anyhow::Result
     );
     dest.write_all(format!("{:?}", &dot).as_bytes())?;
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cargo::core::manifest::Manifest;
+    use semver::{Version, VersionReq};
+    fn make_manifest(name: &'static str, version: Version, dependencies: impl AsRef<[(&'static str, VersionReq)]>) -> Manifest {
+        let config = Config::default().unwrap();
+        let source_id = crates_io(&config).unwrap();
+        let dependencies = dependencies.as_ref().into_iter().map(|(name, version)| {
+            Dependency::new(
+                *name,
+                version.to_string().as_str(),
+                source_id,
+            )
+        }).collect::<Vec<Dependency>>();
+
+        let toml_manifest = format!(
+        r###"
+        [package]
+        name = "{name}"
+        version = "{version}"
+        edition = "2018"
+        description = "{name}"
+        publish = false
+
+        [dependencies]
+        "###
+        name=name, version=version);
+
+        let toml_manifest = dependencies.iter().fold(toml, |mut toml, dep| {
+            toml_manifest.join(format!(r###"\n{name} = {version}"###, name=dep.package_name(), version=dep.version_req()))
+        });
+
+
+        // let metadata = ManifestMetadata {
+        //     authors: vec![],
+        //     keywords: vec![],
+        //     categories: vec![],
+        //     license: None,
+        //     license_file: None,
+        //     description: None,
+        //     readme: None,
+        //     homepage: None,
+        //     repository: None,
+        //     documentation: None,
+        //     badges: Default::default(),
+        //     links: None,
+        // };
+
+        // let pkg_id = PackageId::new(name, version, source_id.clone());
+        // let summary = Summary::new(
+        //     &config,
+        //     pkg_id,
+        //     dependencies,
+        //     &Defeault::default(),
+        //     None,
+        // ).unwrap();
+
+        let toml_manifest: TomlManifest = toml_manifest::from_str(toml_manifest).unwrap();
+        let (manifest, xxx) = toml_manifest.to_real_manifest().unwrap();
+
+
+        // Manifest::new(
+        //     summary,
+        //     CompileKind::Host.into(),
+        //     CompileKind::Host.into(),
+        //     vec![],
+        //     vec![],
+        //     vec![],
+        //     None,
+        //     metdata,
+        //     None,
+        //     None,
+        //     None,
+        //     None,
+        //     Default::default(),
+        //     WorkspaceConfig::Member {
+        //         root: name.to_string().into(),
+        //     },
+        //     Default::default(),
+        //     Edition::Edition2018,
+        //     None,
+        //     None,
+        //     None,
+        //     Rc::new(    ),
+        //     Option<Vec<String>>,
+        //     Option<ResolveBehavior>
+        // )
+        manifest
+    }
+
+    #[test]
+    fn diamond() {
+
+        make_manifest("top", Version::new(0,1,2), [("dx", "15"), ("dy", "1.1")]);
+        make_manifest("dx", Version::new(15,100,0), [("closing", "1.6.4")]);
+        make_manifest("dy", Version::new(1,11,111), [("closing", "1.6.1")]);
+        make_manifest("closing", Version::new(1,6,7), []);
+
+
+        let pkg = Package::new(manifest, manifest_path);
+        let to_release = packages_to_release_inner(ws,
+            || { true },
+             |_ws: &Workspace| -> Vec<Package> {
+            vec![]
+            },
+            Some(
+                PathBuf::from("diamond")
+            )
+        )
+            .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed")
+        ;
+    }
 }

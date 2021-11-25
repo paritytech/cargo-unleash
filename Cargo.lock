@@ -224,6 +224,7 @@ dependencies = [
  "sha1",
  "structopt",
  "tar",
+ "toml",
  "toml_edit",
 ]
 
