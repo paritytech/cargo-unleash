@@ -46,3 +46,4 @@ sha1 = { version = "0.6", optional = true }
 assert_cmd = "2.0"
 assert_fs = "1.0.1"
 predicates = "1"
+toml = "0.5"
