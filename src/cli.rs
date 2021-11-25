@@ -720,7 +720,6 @@ pub fn run(args: Opt) -> Result<(), anyhow::Error> {
                                 v.patch += 1;
                                 // no helper, have to reset the metadata ourselves
                                 v.build = BuildMetadata::EMPTY;
-                                v.pre = Prerelease::EMPTY;
                             }
                             Some(v)
                         },
