@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog].
 
 ## Unreleased
 - Migrated to 2021 edition, enforcing MSRV of `1.56.1`. [#58](https://github.com/paritytech/cargo-unleash/pull/58)
+- Add opt-in `graphviz`/`dot`-file dependency graph generation [#59](https://github.com/paritytech/cargo-unleash/pull/59)
+- Handle diamond shaped dependency trees within a workspace [#59](https://github.com/paritytech/cargo-unleash/pull/59)
 
 ## 1.0.0-alpha.13 - 2021-10-11
 - Update to cargo 0.57 and semver 1.0 – support for `edition = "2021"`
