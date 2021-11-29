@@ -271,27 +271,19 @@ publish = false
     /// ├── closing
     /// │   ├── Cargo.toml
     /// │   └── src
-    /// │       ├── Cargo.toml
-    /// │       ├── lib.rs
-    /// │       └── main.rs
+    /// │       └── lib.rs
     /// ├── dx
     /// │   ├── Cargo.toml
     /// │   └── src
-    /// │       ├── Cargo.toml
-    /// │       ├── lib.rs
-    /// │       └── main.rs
+    /// │       └── lib.rs
     /// ├── dy
     /// │   ├── Cargo.toml
     /// │   └── src
-    /// │       ├── Cargo.toml
-    /// │       ├── lib.rs
-    /// │       └── main.rs
+    /// │       └── lib.rs
     /// └── top
     ///     ├── Cargo.toml
     ///     └── src
-    ///         ├── Cargo.toml
-    ///         ├── lib.rs
-    ///         └── main.rs
+    ///         └── lib.rs
     /// ```
     ///
     /// with the `Cargo.toml` in the `base` directory,
@@ -372,7 +364,7 @@ members = [
                 )
                 .unwrap();
                 std::fs::write(
-                    manifest_path.join("lib.rs"),
+                    manifest_path.join("src").join("lib.rs"),
                     format!(
                         r###"pub fn {name}() {{
                     println!("{name}")
