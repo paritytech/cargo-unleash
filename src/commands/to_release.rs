@@ -201,8 +201,7 @@ mod tests {
     use cargo::Config;
 
     use itertools::Itertools;
-    use regex::internal::Input;
-    use semver::{Version, VersionReq};
+    use semver::Version;
 
     /// Test helper to create a `struct Manifest`
     /// that is only living in memory, but could be written to disk.
@@ -239,7 +238,7 @@ publish = false
 
         let toml_manifest = dependencies
             .iter()
-            .fold(toml_manifest, |mut toml_manifest, dep| {
+            .fold(toml_manifest, |toml_manifest, dep| {
                 toml_manifest
                     + format!(
                         r###"
@@ -359,11 +358,13 @@ members = [
     {}
 ]
 "###,
-                manifests
-                    .iter()
-                    .map(|manifest| format!(r#""./{}""#, manifest.name().as_str()))
-                    .intersperse(", ".to_owned())
-                    .collect::<String>()
+                Itertools::intersperse(
+                    manifests
+                        .iter()
+                        .map(|manifest| format!(r#""./{}""#, manifest.name().as_str())),
+                    ", ".to_owned()
+                )
+                .collect::<String>()
             );
             std::fs::write(base.join("Cargo.toml"), content.as_bytes()).unwrap();
             for manifest in manifests.iter() {
@@ -419,5 +420,6 @@ members = [
             Some(PathBuf::from("diamond.dot")),
         )
         .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed");
+        assert_eq!(to_release.len(), 4);
     }
 }
