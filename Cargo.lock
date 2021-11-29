@@ -215,6 +215,7 @@ dependencies = [
  "flate2",
  "flexi_logger",
  "git2",
+ "itertools",
  "lazy_static",
  "log",
  "petgraph",

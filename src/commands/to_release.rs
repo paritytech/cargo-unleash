@@ -192,118 +192,232 @@ fn graphviz(graph: &Graph<Package, ()>, dest: &mut impl Write) -> anyhow::Result
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use cargo::core::manifest::Manifest;
+    use cargo::core::*;
+    use cargo::util::toml::TomlManifest;
+    use cargo::Config;
+
+    use itertools::Itertools;
+    use regex::internal::Input;
     use semver::{Version, VersionReq};
-    fn make_manifest(name: &'static str, version: Version, dependencies: impl AsRef<[(&'static str, VersionReq)]>) -> Manifest {
-        let config = Config::default().unwrap();
-        let source_id = crates_io(&config).unwrap();
-        let dependencies = dependencies.as_ref().into_iter().map(|(name, version)| {
-            Dependency::new(
-                *name,
-                version.to_string().as_str(),
-                source_id,
-            )
-        }).collect::<Vec<Dependency>>();
+
+    /// Test helper to create a `struct Manifest`
+    /// that is only living in memory, but could be written to disk.
+    fn make_manifest(
+        config: &Config,
+        base: &std::path::Path,
+        name: &'static str,
+        version: Version,
+        dependencies: impl AsRef<[(&'static str, &'static str)]>,
+    ) -> Manifest {
+        let source_id = SourceId::crates_io(&config).unwrap();
+        let dependencies = dependencies
+            .as_ref()
+            .into_iter()
+            .map(|(name, version_req)| {
+                Dependency::parse(*name, (*version_req).into(), source_id).unwrap()
+            })
+            .collect::<Vec<Dependency>>();
 
         let toml_manifest = format!(
-        r###"
-        [package]
-        name = "{name}"
-        version = "{version}"
-        edition = "2018"
-        description = "{name}"
-        publish = false
+            r###"
+[package]
+name = "{name}"
+version = "{version}"
+edition = "2018"
+description = "{name}"
+publish = false
 
-        [dependencies]
-        "###
-        name=name, version=version);
+[dependencies]
+"###,
+            name = name,
+            version = version
+        );
 
-        let toml_manifest = dependencies.iter().fold(toml, |mut toml, dep| {
-            toml_manifest.join(format!(r###"\n{name} = {version}"###, name=dep.package_name(), version=dep.version_req()))
-        });
+        let toml_manifest = dependencies
+            .iter()
+            .fold(toml_manifest, |mut toml_manifest, dep| {
+                toml_manifest
+                    + format!(
+                        r###"
+{name} = "{version}""###,
+                        name = dep.package_name(),
+                        version = dep.version_req()
+                    )
+                    .as_str()
+            });
 
+        let toml_manifest = toml_manifest.as_str();
+        let toml_manifest: TomlManifest = toml::from_str(toml_manifest).unwrap();
+        let (manifest, _paths) = TomlManifest::to_real_manifest(
+            &std::rc::Rc::new(toml_manifest),
+            source_id,
+            base,
+            &config,
+        )
+        .unwrap();
 
-        // let metadata = ManifestMetadata {
-        //     authors: vec![],
-        //     keywords: vec![],
-        //     categories: vec![],
-        //     license: None,
-        //     license_file: None,
-        //     description: None,
-        //     readme: None,
-        //     homepage: None,
-        //     repository: None,
-        //     documentation: None,
-        //     badges: Default::default(),
-        //     links: None,
-        // };
-
-        // let pkg_id = PackageId::new(name, version, source_id.clone());
-        // let summary = Summary::new(
-        //     &config,
-        //     pkg_id,
-        //     dependencies,
-        //     &Defeault::default(),
-        //     None,
-        // ).unwrap();
-
-        let toml_manifest: TomlManifest = toml_manifest::from_str(toml_manifest).unwrap();
-        let (manifest, xxx) = toml_manifest.to_real_manifest().unwrap();
-
-
-        // Manifest::new(
-        //     summary,
-        //     CompileKind::Host.into(),
-        //     CompileKind::Host.into(),
-        //     vec![],
-        //     vec![],
-        //     vec![],
-        //     None,
-        //     metdata,
-        //     None,
-        //     None,
-        //     None,
-        //     None,
-        //     Default::default(),
-        //     WorkspaceConfig::Member {
-        //         root: name.to_string().into(),
-        //     },
-        //     Default::default(),
-        //     Edition::Edition2018,
-        //     None,
-        //     None,
-        //     None,
-        //     Rc::new(    ),
-        //     Option<Vec<String>>,
-        //     Option<ResolveBehavior>
-        // )
         manifest
     }
 
+    use cargo::core::VirtualManifest;
+
+    /// Setup the following directory structure
+    /// ```
+    /// integration
+    /// ├── Cargo.toml
+    /// ├── closing
+    /// │   ├── Cargo.toml
+    /// │   └── src
+    /// │       ├── Cargo.toml
+    /// │       ├── lib.rs
+    /// │       └── main.rs
+    /// ├── dx
+    /// │   ├── Cargo.toml
+    /// │   └── src
+    /// │       ├── Cargo.toml
+    /// │       ├── lib.rs
+    /// │       └── main.rs
+    /// ├── dy
+    /// │   ├── Cargo.toml
+    /// │   └── src
+    /// │       ├── Cargo.toml
+    /// │       ├── lib.rs
+    /// │       └── main.rs
+    /// └── top
+    ///     ├── Cargo.toml
+    ///     └── src
+    ///         ├── Cargo.toml
+    ///         ├── lib.rs
+    ///         └── main.rs
+    /// ```
+    ///
+    /// with the `Cargo.toml` in the `base` directory,
+    /// containing only a `workspace` declaration.
     #[test]
     fn diamond() {
+        let cwd = std::env::current_dir().unwrap();
+        let config = Config::default().unwrap();
 
-        make_manifest("top", Version::new(0,1,2), [("dx", "15"), ("dy", "1.1")]);
-        make_manifest("dx", Version::new(15,100,0), [("closing", "1.6.4")]);
-        make_manifest("dy", Version::new(1,11,111), [("closing", "1.6.1")]);
-        make_manifest("closing", Version::new(1,6,7), []);
+        let base = cwd.join("integration");
+        let base = base.as_path();
+        let manifests = vec![
+            make_manifest(
+                &config,
+                base,
+                "top",
+                Version::new(0, 1, 2),
+                [("dx", "15"), ("dy", "1.1")],
+            ),
+            make_manifest(
+                &config,
+                base,
+                "dx",
+                Version::new(15, 100, 0),
+                [("closing", "1.6.4")],
+            ),
+            make_manifest(
+                &config,
+                base,
+                "dy",
+                Version::new(1, 11, 111),
+                [("closing", "1.6.1")],
+            ),
+            make_manifest(&config, base, "closing", Version::new(1, 6, 7), []),
+        ];
 
+        let vconfig = WorkspaceConfig::Root(WorkspaceRootConfig::new(
+            base,
+            &Some(
+                manifests
+                    .iter()
+                    .map(|manifest| manifest.name().as_str().to_owned())
+                    .collect(),
+            ),
+            &None,
+            &Some(vec![]),
+            &None,
+        ));
+        let vmanifest = VirtualManifest::new(
+            vec![],
+            HashMap::default(),
+            vconfig,
+            None,
+            Features::default(),
+            None,
+        );
 
-        let pkg = Package::new(manifest, manifest_path);
-        let to_release = packages_to_release_inner(ws,
-            || { true },
-             |_ws: &Workspace| -> Vec<Package> {
-            vec![]
-            },
-            Some(
-                PathBuf::from("diamond")
-            )
+        {
+            std::fs::create_dir_all(base).unwrap();
+            let content = format!(
+                r###"
+[workspace]
+members = [
+    {}
+]
+"###,
+                manifests
+                    .iter()
+                    .map(|manifest| format!(r#""./{}""#, manifest.name().as_str()))
+                    .intersperse(", ".to_owned())
+                    .collect::<String>()
+            );
+            std::fs::write(base.join("Cargo.toml"), content.as_bytes()).unwrap();
+            for manifest in manifests.iter() {
+                let name = manifest.name().as_str();
+                let manifest_path = base.join(name).join("src");
+                std::fs::create_dir_all(manifest_path.as_path()).unwrap();
+                std::fs::write(
+                    manifest_path.join("Cargo.toml"),
+                    toml::to_string(manifest.original())
+                        .unwrap()
+                        .as_str()
+                        .as_bytes(),
+                )
+                .unwrap();
+                std::fs::write(
+                    manifest_path.join("lib.rs"),
+                    format!(
+                        r###"pub fn {name}() {{
+                    println!("{name}")
+                }}
+"###,
+                        name = name
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+            }
+        }
+
+        let ws = Workspace::new_virtual(
+            base.to_path_buf(),
+            base.join("Cargo.toml"),
+            vmanifest,
+            &config,
         )
-            .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed")
-        ;
+        .unwrap();
+
+        let to_release = packages_to_release_inner(
+            &ws,
+            |_pkg| true,
+            move |_ws: &Workspace| -> Vec<Package> {
+                manifests
+                    .clone()
+                    .into_iter()
+                    .map(|manifest| {
+                        Package::new(
+                            manifest.clone(),
+                            base.join(manifest.name().as_str()).as_path(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            },
+            Some(PathBuf::from("diamond.dot")),
+        )
+        .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed");
     }
 }
