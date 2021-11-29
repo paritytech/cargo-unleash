@@ -340,17 +340,9 @@ publish = false
             &Some(vec![]),
             &None,
         ));
-        let vmanifest = VirtualManifest::new(
-            vec![],
-            HashMap::default(),
-            vconfig,
-            None,
-            Features::default(),
-            None,
-        );
 
         {
-            std::fs::create_dir_all(base).unwrap();
+            std::fs::create_dir_all(base.join("integration")).unwrap();
             let content = format!(
                 r###"
 [workspace]
@@ -369,8 +361,8 @@ members = [
             std::fs::write(base.join("Cargo.toml"), content.as_bytes()).unwrap();
             for manifest in manifests.iter() {
                 let name = manifest.name().as_str();
-                let manifest_path = base.join(name).join("src");
-                std::fs::create_dir_all(manifest_path.as_path()).unwrap();
+                let manifest_path = base.join(name);
+                std::fs::create_dir_all(manifest_path.join("src")).unwrap();
                 std::fs::write(
                     manifest_path.join("Cargo.toml"),
                     toml::to_string(manifest.original())
@@ -393,6 +385,15 @@ members = [
                 .unwrap();
             }
         }
+
+        let vmanifest = VirtualManifest::new(
+            vec![],
+            HashMap::default(),
+            vconfig,
+            None,
+            Features::default(),
+            None,
+        );
 
         let ws = Workspace::new_virtual(
             base.to_path_buf(),
