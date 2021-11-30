@@ -22,18 +22,40 @@ pub fn packages_to_release<F>(
 where
     F: Fn(&Package) -> bool,
 {
-    packages_to_release_inner(ws, predicate, members_deep, write_dot_graph)
+    packages_to_release_inner(ws, predicate, write_dot_graph).map_err(
+        |ErrorWithCycles(cycles, e)| {
+            let named = cycles
+                .iter()
+                .map(|cycle| {
+                    cycle
+                        .iter()
+                        .map(|pkg| pkg.name().as_str())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            e.context(format!("Cycles: {:?}", named))
+        },
+    )
 }
 
-fn packages_to_release_inner<'cfg, F, C>(
+type DependencyCycle = Vec<Package>;
+
+/// Error with additional cycle annotations.
+struct ErrorWithCycles(Vec<DependencyCycle>, anyhow::Error);
+
+impl<T: Into<anyhow::Error>> From<T> for ErrorWithCycles {
+    fn from(src: T) -> Self {
+        ErrorWithCycles(vec![], src.into())
+    }
+}
+
+fn packages_to_release_inner<'cfg, F>(
     ws: &Workspace<'cfg>,
     predicate: F,
-    package_collector: C,
     write_dot_graph: Option<PathBuf>,
-) -> Result<Vec<Package>, anyhow::Error>
+) -> Result<Vec<Package>, ErrorWithCycles>
 where
     F: Fn(&Package) -> bool,
-    C: Fn(&Workspace<'cfg>) -> Vec<Package>,
 {
     // inspired by the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
     ws.config()
@@ -42,7 +64,7 @@ where
         .expect("Writing to Shell doesn't fail");
 
     let mut graph = Graph::<Package, (), Directed, u32>::new();
-    let members = package_collector(ws);
+    let members = members_deep(ws);
 
     let (members, to_ignore): (Vec<_>, Vec<_>) = members.iter().partition(|m| predicate(m));
 
@@ -151,14 +173,14 @@ where
         assert!(petgraph::algo::is_cyclic_directed(&graph));
         let cycles = cycles
             .iter()
-            .map(|x| {
-                x.iter()
-                    .map(|i| graph.node_weight(*i).unwrap())
-                    .map(|pkg| pkg.name())
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .map(|i| graph.node_weight(*i).unwrap()).cloned()
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        anyhow::bail!("Contains cycles: {:?}", cycles);
+        return Err(ErrorWithCycles(cycles, anyhow::anyhow!("Contains cycles")));
     }
 
     // reverse in place, the output of `scc_karaju` is in reverse order
