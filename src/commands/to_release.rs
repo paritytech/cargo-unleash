@@ -49,8 +49,8 @@ impl<T: Into<anyhow::Error>> From<T> for ErrorWithCycles {
     }
 }
 
-fn packages_to_release_inner<'cfg, F>(
-    ws: &Workspace<'cfg>,
+fn packages_to_release_inner<F>(
+    ws: &Workspace<'_>,
     predicate: F,
     write_dot_graph: Option<PathBuf>,
 ) -> Result<Vec<Package>, ErrorWithCycles>
@@ -176,7 +176,8 @@ where
             .map(|nodes| {
                 nodes
                     .iter()
-                    .map(|i| graph.node_weight(*i).unwrap()).cloned()
+                    .map(|i| graph.node_weight(*i).unwrap())
+                    .cloned()
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -273,7 +274,7 @@ publish = false
             &std::rc::Rc::new(toml_manifest),
             source_id,
             base,
-            &config,
+            config,
         )
         .unwrap();
 
