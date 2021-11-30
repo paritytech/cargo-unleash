@@ -482,4 +482,28 @@ publish = false
         assert_eq!(to_release.len(), 4);
         Ok(())
     }
+
+    #[test]
+    fn circular() -> Result<()> {
+        let target_dir = PathBuf::from(env!("OUT_DIR")).join("diamond");
+
+        let mut wsb = WorkspaceBuilder::default();
+        wsb.add_crate("a")
+            .version(3, 0, 0)
+            .add_dependency("b", "*")?;
+        wsb.add_crate("b")
+            .version(2, 0, 0)
+            .add_dependency("c", "*")?;
+        wsb.add_crate("c")
+            .version(1, 0, 0)
+            .add_dependency("a", "*")?;
+
+        let ws = wsb.build(target_dir)?;
+        let ErrorWithCycles(cycles, _err) =
+            packages_to_release_inner(&ws, |_pkg| true, Some(PathBuf::from("diamond.dot")))
+                .unwrap_err();
+        assert_eq!(cycles.len(), 1);
+        assert_eq!(cycles[0].len(), 3);
+        Ok(())
+    }
 }
