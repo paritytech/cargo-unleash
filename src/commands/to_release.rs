@@ -200,8 +200,10 @@ mod tests {
     use cargo::util::toml::TomlManifest;
     use cargo::Config;
 
+    use anyhow::Result;
     use itertools::Itertools;
     use semver::Version;
+    use std::path::Path;
 
     /// Test helper to create a `struct Manifest`
     /// that is only living in memory, but could be written to disk.
@@ -210,17 +212,9 @@ mod tests {
         base: &std::path::Path,
         name: &'static str,
         version: Version,
-        dependencies: impl AsRef<[(&'static str, &'static str)]>,
+        source_id: SourceId,
+        dependencies: impl AsRef<[Dependency]>,
     ) -> Manifest {
-        let source_id = SourceId::crates_io(&config).unwrap();
-        let dependencies = dependencies
-            .as_ref()
-            .into_iter()
-            .map(|(name, version_req)| {
-                Dependency::parse(*name, (*version_req).into(), source_id).unwrap()
-            })
-            .collect::<Vec<Dependency>>();
-
         let toml_manifest = format!(
             r###"
 [package]
@@ -236,18 +230,20 @@ publish = false
             version = version
         );
 
-        let toml_manifest = dependencies
-            .iter()
-            .fold(toml_manifest, |toml_manifest, dep| {
-                toml_manifest
-                    + format!(
-                        r###"
+        let toml_manifest =
+            dependencies
+                .as_ref()
+                .iter()
+                .fold(toml_manifest, |toml_manifest, dep| {
+                    toml_manifest
+                        + format!(
+                            r###"
 {name} = "{version}""###,
-                        name = dep.package_name(),
-                        version = dep.version_req()
-                    )
-                    .as_str()
-            });
+                            name = dep.package_name(),
+                            version = dep.version_req()
+                        )
+                        .as_str()
+                });
 
         let toml_manifest = toml_manifest.as_str();
         let toml_manifest: TomlManifest = toml::from_str(toml_manifest).unwrap();
@@ -264,9 +260,162 @@ publish = false
 
     use cargo::core::VirtualManifest;
 
+    #[derive(Default, Debug, Clone)]
+    struct Krate {
+        name: &'static str,
+        version: Option<Version>,
+        dependencies: Vec<Dependency>,
+    }
+
+    impl Krate {
+        pub fn version(&mut self, major: u64, minor: u64, patch: u64) -> &mut Self {
+            self.version = Some(Version::new(major, minor, patch));
+            self
+        }
+
+        pub fn add_dependency(
+            &mut self,
+            dependency: &'static str,
+            version_req: &'static str,
+        ) -> Result<&mut Self> {
+            // TODO make this pretty
+            let config = Config::default().unwrap();
+            let source_id = SourceId::crates_io(&config)?;
+
+            let dependency = Dependency::parse(dependency, version_req.into(), source_id)?;
+            self.dependencies.push(dependency);
+            Ok(self)
+        }
+    }
+
+    #[derive(Default, Debug, Clone)]
+    struct WorkspaceBuilder {
+        base: PathBuf,
+        krates: Vec<Krate>,
+    }
+
+    impl WorkspaceBuilder {
+        pub fn add_crate(&mut self, name: &'static str) -> &mut Krate {
+            let krate = Krate {
+                name,
+                version: None,
+                dependencies: vec![],
+            };
+            self.krates.push(krate);
+            self.krates.last_mut().unwrap()
+        }
+
+        pub fn build(self, base: impl AsRef<Path>) -> Result<Workspace<'static>> {
+            let config = {
+                let config = Config::default().unwrap();
+                Box::leak(Box::new(config))
+            };
+            let base = base.as_ref();
+
+            let source_id = SourceId::crates_io(&*config).unwrap();
+
+            let manifests = self
+                .krates
+                .iter()
+                .map(
+                    |Krate {
+                         name,
+                         version,
+                         dependencies,
+                     }| {
+                        Ok(make_manifest(
+                            config,
+                            base,
+                            name,
+                            version.clone().expect("Must have version. qed"),
+                            source_id,
+                            dependencies,
+                        ))
+                    },
+                )
+                .collect::<Result<Vec<Manifest>>>()?;
+
+            let vconfig = WorkspaceConfig::Root(WorkspaceRootConfig::new(
+                base,
+                &Some(
+                    manifests
+                        .iter()
+                        .map(|manifest| manifest.name().as_str().to_owned())
+                        .collect(),
+                ),
+                &None,
+                &Some(vec![]),
+                &None,
+            ));
+
+            // crate the filesystem tree
+            {
+                std::fs::create_dir_all(base).unwrap();
+                let content = format!(
+                    r###"
+    [workspace]
+    members = [
+        {}
+    ]
+    "###,
+                    Itertools::intersperse(
+                        manifests
+                            .iter()
+                            .map(|manifest| format!(r#""./{}""#, manifest.name().as_str())),
+                        ", ".to_owned()
+                    )
+                    .collect::<String>()
+                );
+                std::fs::write(base.join("Cargo.toml"), content.as_bytes()).unwrap();
+                for manifest in manifests.iter() {
+                    let name = manifest.name().as_str();
+                    let manifest_path = base.join(name);
+                    std::fs::create_dir_all(manifest_path.join("src")).unwrap();
+                    std::fs::write(
+                        manifest_path.join("Cargo.toml"),
+                        toml::to_string(manifest.original())
+                            .unwrap()
+                            .as_str()
+                            .as_bytes(),
+                    )
+                    .unwrap();
+                    std::fs::write(
+                        manifest_path.join("src").join("lib.rs"),
+                        format!(
+                            r###"pub fn {name}() {{
+                        println!("{name}")
+                    }}
+    "###,
+                            name = name
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();
+                }
+            }
+
+            let vmanifest = VirtualManifest::new(
+                vec![],
+                HashMap::default(),
+                vconfig,
+                None,
+                Features::default(),
+                None,
+            );
+
+            let ws = Workspace::new_virtual(
+                base.to_path_buf(),
+                base.join("Cargo.toml"),
+                vmanifest,
+                &*config,
+            )?;
+            Ok(ws)
+        }
+    }
+
     /// Setup the following directory structure
     /// ```
-    /// integration
+    /// $OUT_DIR/integration
     /// ├── Cargo.toml
     /// ├── closing
     /// │   ├── Cargo.toml
@@ -289,130 +438,26 @@ publish = false
     /// with the `Cargo.toml` in the `base` directory,
     /// containing only a `workspace` declaration.
     #[test]
-    fn diamond() {
-        let cwd = std::env::current_dir().unwrap();
-        let config = Config::default().unwrap();
+    fn diamond() -> Result<()> {
+        let target_dir = PathBuf::from(env!("OUT_DIR")).join("diamond");
 
-        let base = cwd.join("integration");
-        let base = base.as_path();
-        let manifests = vec![
-            make_manifest(
-                &config,
-                base,
-                "top",
-                Version::new(0, 1, 2),
-                [("dx", "15"), ("dy", "1.1")],
-            ),
-            make_manifest(
-                &config,
-                base,
-                "dx",
-                Version::new(15, 100, 0),
-                [("closing", "1.6.4")],
-            ),
-            make_manifest(
-                &config,
-                base,
-                "dy",
-                Version::new(1, 11, 111),
-                [("closing", "1.6.1")],
-            ),
-            make_manifest(&config, base, "closing", Version::new(1, 6, 7), []),
-        ];
+        let mut wsb = WorkspaceBuilder::default();
+        wsb.add_crate("top")
+            .version(0, 1, 2)
+            .add_dependency("dx", "1.11")?
+            .add_dependency("dy", "15")?;
+        wsb.add_crate("dx")
+            .version(1, 11, 111)
+            .add_dependency("closing", "1.6.4")?;
+        wsb.add_crate("dy")
+            .version(15, 100, 0)
+            .add_dependency("closing", "1.6.1")?;
+        wsb.add_crate("closing").version(1, 6, 9);
 
-        let vconfig = WorkspaceConfig::Root(WorkspaceRootConfig::new(
-            base,
-            &Some(
-                manifests
-                    .iter()
-                    .map(|manifest| manifest.name().as_str().to_owned())
-                    .collect(),
-            ),
-            &None,
-            &Some(vec![]),
-            &None,
-        ));
-
-        {
-            std::fs::create_dir_all(base.join("integration")).unwrap();
-            let content = format!(
-                r###"
-[workspace]
-members = [
-    {}
-]
-"###,
-                Itertools::intersperse(
-                    manifests
-                        .iter()
-                        .map(|manifest| format!(r#""./{}""#, manifest.name().as_str())),
-                    ", ".to_owned()
-                )
-                .collect::<String>()
-            );
-            std::fs::write(base.join("Cargo.toml"), content.as_bytes()).unwrap();
-            for manifest in manifests.iter() {
-                let name = manifest.name().as_str();
-                let manifest_path = base.join(name);
-                std::fs::create_dir_all(manifest_path.join("src")).unwrap();
-                std::fs::write(
-                    manifest_path.join("Cargo.toml"),
-                    toml::to_string(manifest.original())
-                        .unwrap()
-                        .as_str()
-                        .as_bytes(),
-                )
-                .unwrap();
-                std::fs::write(
-                    manifest_path.join("src").join("lib.rs"),
-                    format!(
-                        r###"pub fn {name}() {{
-                    println!("{name}")
-                }}
-"###,
-                        name = name
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
-            }
-        }
-
-        let vmanifest = VirtualManifest::new(
-            vec![],
-            HashMap::default(),
-            vconfig,
-            None,
-            Features::default(),
-            None,
-        );
-
-        let ws = Workspace::new_virtual(
-            base.to_path_buf(),
-            base.join("Cargo.toml"),
-            vmanifest,
-            &config,
-        )
-        .unwrap();
-
-        let to_release = packages_to_release_inner(
-            &ws,
-            |_pkg| true,
-            move |_ws: &Workspace| -> Vec<Package> {
-                manifests
-                    .clone()
-                    .into_iter()
-                    .map(|manifest| {
-                        Package::new(
-                            manifest.clone(),
-                            base.join(manifest.name().as_str()).as_path(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            },
-            Some(PathBuf::from("diamond.dot")),
-        )
-        .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed");
+        let ws = wsb.build(target_dir)?;
+        let to_release = packages_to_release(&ws, |_pkg| true, Some(PathBuf::from("diamond.dot")))
+            .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed");
         assert_eq!(to_release.len(), 4);
+        Ok(())
     }
 }
