@@ -22,7 +22,7 @@ use std::{
     sync::Arc,
 };
 use tar::Archive;
-use toml_edit::{decorated, Document, Item, Value};
+use toml_edit::{Document, Item, Value};
 
 fn inject_replacement(
     pkg: &Package,
@@ -36,7 +36,7 @@ fn inject_replacement(
 
     edit_each_dep(root, |name, _, entry| {
         if let Some(p) = replace.get(&name) {
-            let path = decorated(Value::from(p.clone()), " ", " ");
+            let path = Value::from(p.clone()).decorated(" ", " ");
             match entry {
                 DependencyEntry::Inline(info) => {
                     info.get_or_insert("path", path);

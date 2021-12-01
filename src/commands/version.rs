@@ -4,7 +4,7 @@ use cargo::core::{package::Package, Workspace};
 use log::trace;
 use semver::{Version, VersionReq};
 use std::collections::HashMap;
-use toml_edit::{decorated, Item, Value};
+use toml_edit::{Entry, Item, Value};
 
 fn check_for_update(
     name: String,
@@ -34,7 +34,7 @@ fn check_for_update(
                     .expect("Cargo enforces us using semver versions. qed");
                 if force_update || !r.matches(new_version) {
                     trace!("Versions don't match anymore, updating.");
-                    *v_req = decorated(Value::from(format!("{:}", new_version)), " ", "");
+                    *v_req = Value::from(format!("{:}", new_version)).decorated(" ", "");
                     return DependencyAction::Mutated;
                 }
             } else {
@@ -43,7 +43,7 @@ fn check_for_update(
                 // having a space here means we formatting it nicer inline
                 info.get_or_insert(
                     " version",
-                    decorated(Value::from(format!("{:}", new_version)), " ", " "),
+                    Value::from(format!("{:}", new_version)).decorated(" ", " "),
                 );
                 return DependencyAction::Mutated;
             }
@@ -69,7 +69,7 @@ fn check_for_update(
                     trace!("No version found, setting.");
                 }
                 info["version"] =
-                    Item::Value(decorated(Value::from(format!("{:}", new_version)), " ", ""));
+                    Item::Value(Value::from(format!("{:}", new_version)).decorated(" ", ""));
                 return DependencyAction::Mutated;
             }
         }
@@ -102,7 +102,7 @@ where
                     )
                     .expect("Writing to the shell would have failed before. qed");
                 doc["package"]["version"] =
-                    Item::Value(decorated(Value::from(nv_version.to_string()), " ", ""));
+                    Item::Value(Value::from(nv_version.to_string()).decorated(" ", ""));
                 (p.name().as_str().to_owned(), nv_version)
             }))
         },
@@ -120,23 +120,25 @@ where
             check_for_update(a, b, &updates, force_update)
         });
 
-        if let Item::Table(t) = root.entry("target") {
-            let keys = t
-                .iter()
-                .filter_map(|(k, v)| {
-                    if v.is_table() {
-                        Some(k.to_owned())
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
+        if let Entry::Occupied(occupied) = root.entry("target") {
+            if let Item::Table(table) = occupied.get() {
+                let keys = table
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        if v.is_table() {
+                            Some(k.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
 
-            for k in keys {
-                if let Item::Table(root) = t.entry(&k) {
-                    updates_count += edit_each_dep(root, |a, _, b| {
-                        check_for_update(a, b, &updates, force_update)
-                    });
+                for k in keys {
+                    if let Some(Item::Table(root)) = root.get_mut(&k) {
+                        updates_count += edit_each_dep(root, |a, _, b| {
+                            check_for_update(a, b, &updates, force_update)
+                        });
+                    }
                 }
             }
         }

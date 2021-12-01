@@ -1,7 +1,7 @@
 use crate::util::edit_each;
 use cargo::core::package::Package;
 
-use toml_edit::{decorated, Item, Table, Value};
+use toml_edit::{Item, Table, Value};
 
 /// Deactivate the Dev Dependencies Section of the given toml
 pub fn set_field<'a, I>(
@@ -15,10 +15,10 @@ where
 {
     let _ = edit_each(iter, |p, doc| {
         let table = {
-            let t = doc.as_table_mut().entry(&root_key);
-            if t.is_none() {
-                *t = Item::Table(Table::new());
-            }
+            let t = doc
+                .as_table_mut()
+                .entry(&root_key)
+                .or_insert_with(|| Item::Table(Table::new()));
             if let Item::Table(inner) = t {
                 inner
             } else {
@@ -29,8 +29,7 @@ where
                 );
             }
         };
-        let entry = table.entry(&key);
-        *entry = Item::Value(decorated(value.clone(), " ", ""));
+        let _ = table.insert(&key, Item::Value(value.clone().decorated(" ", "")));
         Ok(())
     });
     Ok(())

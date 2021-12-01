@@ -2,7 +2,7 @@ use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, Depe
 use cargo::core::{package::Package, Workspace};
 use log::trace;
 use std::collections::HashMap;
-use toml_edit::{decorated, Item, Value};
+use toml_edit::{Entry, Item, Value};
 
 fn check_for_update(
     name: String,
@@ -24,7 +24,7 @@ fn check_for_update(
             trace!("We renamed {:} to {:}", name, new_name);
             info.get_or_insert(
                 " package",
-                decorated(Value::from(new_name.to_string()), " ", " "),
+                Value::from(new_name.to_string()).decorated(" ", " "),
             );
 
             DependencyAction::Mutated
@@ -34,7 +34,7 @@ fn check_for_update(
                 return DependencyAction::Untouched; // entry isn't local
             }
 
-            info["package"] = Item::Value(decorated(Value::from(new_name.to_string()), " ", ""));
+            info["package"] = Item::Value(Value::from(new_name.to_string()).decorated(" ", ""));
 
             DependencyAction::Mutated
         }
@@ -58,7 +58,7 @@ where
                     .status("Renaming", format!("{:} -> {:}", p.name(), new_name))
                     .expect("Writing to the shell would have failed before. qed");
                 doc["package"]["name"] =
-                    Item::Value(decorated(Value::from(new_name.to_string()), " ", ""));
+                    Item::Value(Value::from(new_name.to_string()).decorated(" ", ""));
                 (p.name().as_str().to_owned(), new_name)
             }))
         },
@@ -79,8 +79,8 @@ where
         let mut updates_count = 0;
         updates_count += edit_each_dep(root, |a, _, b| check_for_update(a, b, &updates));
 
-        if let Item::Table(t) = root.entry("target") {
-            let keys = t
+        if let Some(Item::Table(table)) = root.get_mut("target") {
+            let keys = table
                 .iter()
                 .filter_map(|(k, v)| {
                     if v.is_table() {
@@ -92,12 +92,13 @@ where
                 .collect::<Vec<_>>();
 
             for k in keys {
-                if let Item::Table(root) = t.entry(&k) {
+                if let Some(Item::Table(root)) = table.get_mut(&k) {
                     updates_count +=
                         edit_each_dep(root, |a, _, b| check_for_update(a, b, &updates));
                 }
             }
         }
+
         if updates_count == 0 {
             c.shell().status("Done", "No dependency updates")?;
         } else if updates_count == 1 {
