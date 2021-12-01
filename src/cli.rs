@@ -486,7 +486,7 @@ fn verify_readme_feature() -> Result<(), anyhow::Error> {
 }
 
 pub fn run(args: Opt) -> Result<(), anyhow::Error> {
-    let _ = Logger::with_str(args.log.clone()).start();
+    let _ = Logger::try_with_str(args.log.clone())?.start()?;
     let mut c = CargoConfig::default().expect("Couldn't create cargo config");
     c.values()?;
     c.load_credentials()?;
