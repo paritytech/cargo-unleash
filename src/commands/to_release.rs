@@ -5,7 +5,7 @@ use cargo::{
 };
 use log::{trace, warn};
 use petgraph::dot::{self, Dot};
-use petgraph::{Directed, Graph};
+use petgraph::{graph::EdgeReference, visit::EdgeRef, Directed, Graph};
 use std::{
     collections::{HashMap, HashSet},
     fs::OpenOptions,
@@ -148,15 +148,6 @@ where
         }
     }
 
-    if let Some(dest) = write_dot_graph {
-        let mut dest = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(dest)?;
-        graphviz(&graph, &mut dest)?;
-    }
-
     // cannot use `toposort` for graphs that are cyclic in a undirected sense
     // but are not in a directed way
     let mut cycles = vec![];
@@ -169,6 +160,16 @@ where
             _ => cycles.push(strongly_connected),
         }
     }
+
+    if let Some(dest) = write_dot_graph {
+        let mut dest = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(dest)?;
+        graphviz(&graph, &cycles, &mut dest)?;
+    }
+
     if !cycles.is_empty() {
         assert!(petgraph::algo::is_cyclic_directed(&graph));
         let cycles = cycles
@@ -194,21 +195,47 @@ where
     Ok(packages)
 }
 
+use petgraph::graph::NodeIndex;
+
 /// Render a graphviz (aka dot graph) to a file.
-fn graphviz(graph: &Graph<Package, ()>, dest: &mut impl Write) -> anyhow::Result<()> {
+fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
+    graph: &Graph<Package, (), Directed, u32>,
+    cycles: I,
+    dest: &mut W,
+) -> anyhow::Result<()> {
+    let cycle_indices = cycles
+        .into_iter()
+        .map(|y| y.iter())
+        .flatten()
+        .copied()
+        .collect::<HashSet<_>>();
     let config = &[dot::Config::EdgeNoLabel, dot::Config::NodeNoLabel][..];
-    let dot = Dot::with_attr_getters(
-        graph,
-        config,
-        &|_graph, _edge_ref| -> String { "".to_owned() },
-        &|_graph, (_idx, pkg)| -> String {
-            format!(
-                r#"label="{}:{}""#,
+    let get_edge_attributes = |_graph: &Graph<Package, (), Directed, u32>,
+                               edge_ref: EdgeReference<'_, ()>|
+     -> String {
+        if cycle_indices.contains(&edge_ref.target()) && cycle_indices.contains(&edge_ref.source())
+        {
+            r#"color=red"#
+        } else {
+            ""
+        }
+        .to_owned()
+    };
+    let get_node_attributes =
+        |_graph: &Graph<Package, (), Directed, u32>, (idx, pkg): (NodeIndex, &Package)| -> String {
+            let label = format!(
+                r#"label="{}:{}" "#,
                 pkg.name().to_string(),
                 pkg.version().to_string().as_str()
-            )
-        },
-    );
+            );
+            if cycle_indices.contains(&idx) {
+                label + "color=red"
+            } else {
+                label
+            }
+        };
+
+    let dot = Dot::with_attr_getters(graph, config, &get_edge_attributes, &get_node_attributes);
     dest.write_all(format!("{:?}", &dot).as_bytes())?;
     Ok(())
 }
