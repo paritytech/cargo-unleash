@@ -534,7 +534,7 @@ publish = false
 
         let ws = wsb.build(target_dir)?;
         let ErrorWithCycles(cycles, _err) =
-            packages_to_release_inner(&ws, |_pkg| true, Some(PathBuf::from("diamond.dot")))
+            packages_to_release_inner(&ws, |_pkg| true, Some(PathBuf::from("circular.dot")))
                 .unwrap_err();
         assert_eq!(cycles.len(), 1);
         assert_eq!(cycles[0].len(), 3);
