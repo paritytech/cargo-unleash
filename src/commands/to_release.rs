@@ -478,7 +478,15 @@ publish = false
         let ws = wsb.build(target_dir)?;
         let to_release = packages_to_release(&ws, |_pkg| true, Some(PathBuf::from("diamond.dot")))
             .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed");
-        assert_eq!(to_release.len(), 4);
+        // must be in release order, so the leaf has to have a lower index, dependencies on the same
+        // level are ordered by there reverse appearance in the members declaration
+        assert_eq!(
+            vec!["closing", "dy", "dx", "top"],
+            to_release
+                .iter()
+                .map(|pkg| pkg.name().as_str())
+                .collect::<Vec<_>>()
+        );
         Ok(())
     }
 
@@ -503,6 +511,14 @@ publish = false
                 .unwrap_err();
         assert_eq!(cycles.len(), 1);
         assert_eq!(cycles[0].len(), 3);
+        // The start node is defined by the sequence in the members declaration
+        assert_eq!(
+            vec!["a", "b", "c"],
+            cycles[0]
+                .iter()
+                .map(|pkg| pkg.name().as_str())
+                .collect::<Vec<_>>()
+        );
         Ok(())
     }
 }
