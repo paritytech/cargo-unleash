@@ -23,7 +23,7 @@ gen-readme = ["cargo-readme","lazy_static","sha1"]
 
 [dependencies]
 structopt = "0.3.9"
-toml_edit = "0.2.0"
+toml_edit = "0.10.0"
 log = "0.4.8"
 flexi_logger = "0.20"
 petgraph = "0.6"

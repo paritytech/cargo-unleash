@@ -140,11 +140,15 @@ where
                 continue;
             }
         };
-        let t = root.entry(k).as_table_mut().expect("Just checked. qed");
+        let t = root
+            .get_mut(k)
+            .expect("Exists. qed")
+            .as_table_mut()
+            .expect("Is table. qed");
 
         for key in keys {
-            let (name, action) = match t.entry(&key) {
-                Item::Value(Value::InlineTable(info)) => {
+            let (name, action) = match t.get_mut(&key) {
+                Some(Item::Value(Value::InlineTable(info))) => {
                     let (name, alias) = {
                         if let Some(name) = info.get("package") {
                             // is there a rename
@@ -159,7 +163,7 @@ where
                     };
                     (name.clone(), f(name, alias, DependencyEntry::Inline(info)))
                 }
-                Item::Table(info) => {
+                Some(Item::Table(info)) => {
                     let (name, alias) = {
                         if let Some(name) = info.get("package") {
                             // is there a rename
@@ -174,6 +178,9 @@ where
                     };
 
                     (name.clone(), f(name, alias, DependencyEntry::Table(info)))
+                }
+                None => {
+                    continue;
                 }
                 _ => {
                     warn!("Unsupported dependency format");
@@ -192,13 +199,13 @@ where
     }
 
     if !removed.is_empty() {
-        if let Item::Table(features) = root.entry("features") {
+        if let Some(Item::Table(features)) = root.get_mut("features") {
             let keys = features
                 .iter()
                 .map(|(k, _v)| k.to_owned())
                 .collect::<Vec<_>>();
             for feat in keys {
-                if let Item::Value(Value::Array(deps)) = features.entry(&feat) {
+                if let Some(Item::Value(Value::Array(deps))) = features.get_mut(&feat) {
                     let mut to_remove = Vec::new();
                     for (idx, dep) in deps.iter().enumerate() {
                         if let Value::String(s) = dep {
