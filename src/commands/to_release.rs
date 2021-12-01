@@ -184,13 +184,11 @@ where
         return Err(ErrorWithCycles(cycles, anyhow::anyhow!("Contains cycles")));
     }
 
-    // reverse in place, the output of `scc_karaju` is in reverse order
-    toposorted_indices.reverse();
+    // the output of `kosaraju_scc` is in reverse topological order, leafs first, which matches
 
     let packages = toposorted_indices
         .into_iter()
         .map(|i| graph.node_weight(i).unwrap().clone())
-        .rev()
         .collect::<Vec<_>>();
 
     Ok(packages)
