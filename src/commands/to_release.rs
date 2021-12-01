@@ -14,15 +14,16 @@ use std::{
 };
 
 /// Generate the packages we should be releasing
-pub fn packages_to_release<F>(
+pub fn packages_to_release<F, D>(
     ws: &Workspace<'_>,
     predicate: F,
-    write_dot_graph: Option<PathBuf>,
+    write_dot_graph: D,
 ) -> Result<Vec<Package>, anyhow::Error>
 where
     F: Fn(&Package) -> bool,
+    D: Into<Option<PathBuf>>,
 {
-    packages_to_release_inner(ws, predicate, write_dot_graph).map_err(
+    packages_to_release_inner::<F, D>(ws, predicate, write_dot_graph).map_err(
         |ErrorWithCycles(cycles, e)| {
             let named = cycles
                 .iter()
@@ -49,13 +50,14 @@ impl<T: Into<anyhow::Error>> From<T> for ErrorWithCycles {
     }
 }
 
-fn packages_to_release_inner<F>(
+fn packages_to_release_inner<F, D>(
     ws: &Workspace<'_>,
     predicate: F,
-    write_dot_graph: Option<PathBuf>,
+    write_dot_graph: D,
 ) -> Result<Vec<Package>, ErrorWithCycles>
 where
     F: Fn(&Package) -> bool,
+    D: Into<Option<PathBuf>>,
 {
     // inspired by the work of `cargo-publish-all`: https://gitlab.com/torkleyy/cargo-publish-all
     ws.config()
@@ -161,7 +163,7 @@ where
         }
     }
 
-    if let Some(dest) = write_dot_graph {
+    if let Some(dest) = write_dot_graph.into() {
         let mut dest = OpenOptions::new()
             .create(true)
             .truncate(true)
