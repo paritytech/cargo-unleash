@@ -463,6 +463,10 @@ publish = false
         }
     }
 
+    fn test_tmp_dir(name: &'static str) -> PathBuf {
+        std::env::temp_dir().join("cargo-unleash").join(name)
+    }
+
     /// Setup the following directory structure
     /// ```
     /// $OUT_DIR/integration
@@ -489,7 +493,8 @@ publish = false
     /// containing only a `workspace` declaration.
     #[test]
     fn diamond() -> Result<()> {
-        let target_dir = PathBuf::from(env!("OUT_DIR")).join("diamond");
+        let tmp = test_tmp_dir("diamond");
+        let target_dir = tmp.clone();
 
         let mut wsb = WorkspaceBuilder::default();
         wsb.add_crate("top")
@@ -505,7 +510,7 @@ publish = false
         wsb.add_crate("closing").version(1, 6, 9);
 
         let ws = wsb.build(target_dir)?;
-        let to_release = packages_to_release(&ws, |_pkg| true, Some(PathBuf::from("diamond.dot")))
+        let to_release = packages_to_release(&ws, |_pkg| true, tmp.join("diamond.dot"))
             .expect("There are no cycles in a diamond shaped, directed, dependency graph. qed");
         // must be in release order, so the leaf has to have a lower index, dependencies on the same
         // level are ordered by there reverse appearance in the members declaration
@@ -521,7 +526,8 @@ publish = false
 
     #[test]
     fn circular() -> Result<()> {
-        let target_dir = PathBuf::from(env!("OUT_DIR")).join("diamond");
+        let tmp = test_tmp_dir("circular");
+        let target_dir = tmp.clone();
 
         let mut wsb = WorkspaceBuilder::default();
         wsb.add_crate("a")
@@ -536,8 +542,7 @@ publish = false
 
         let ws = wsb.build(target_dir)?;
         let ErrorWithCycles(cycles, _err) =
-            packages_to_release_inner(&ws, |_pkg| true, Some(PathBuf::from("circular.dot")))
-                .unwrap_err();
+            packages_to_release_inner(&ws, |_pkg| true, tmp.join("circular.dot")).unwrap_err();
         assert_eq!(cycles.len(), 1);
         assert_eq!(cycles[0].len(), 3);
         // The start node is defined by the sequence in the members declaration
