@@ -5,7 +5,7 @@ use cargo::{
 };
 use log::{trace, warn};
 use petgraph::dot::{self, Dot};
-use petgraph::{graph::EdgeReference, visit::EdgeRef, Directed, Graph};
+use petgraph::{graph::{NodeIndex, EdgeReference}, visit::EdgeRef, Directed, Graph};
 use std::{
     collections::{HashMap, HashSet},
     fs::OpenOptions,
@@ -197,7 +197,6 @@ where
     Ok(packages)
 }
 
-use petgraph::graph::NodeIndex;
 
 /// Render a graphviz (aka dot graph) to a file.
 fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
