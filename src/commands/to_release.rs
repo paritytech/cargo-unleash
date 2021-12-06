@@ -5,7 +5,11 @@ use cargo::{
 };
 use log::{trace, warn};
 use petgraph::dot::{self, Dot};
-use petgraph::{graph::{NodeIndex, EdgeReference}, visit::EdgeRef, Directed, Graph};
+use petgraph::{
+    graph::{EdgeReference, NodeIndex},
+    visit::EdgeRef,
+    Directed, Graph,
+};
 use std::{
     collections::{HashMap, HashSet},
     fs::OpenOptions,
@@ -197,7 +201,6 @@ where
     Ok(packages)
 }
 
-
 /// Render a graphviz (aka dot graph) to a file.
 fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
     graph: &Graph<Package, (), Directed, u32>,
@@ -211,17 +214,17 @@ fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
         .copied()
         .collect::<HashSet<_>>();
     let config = &[dot::Config::EdgeNoLabel, dot::Config::NodeNoLabel][..];
-    let get_edge_attributes = |_graph: &Graph<Package, (), Directed, u32>,
-                               edge_ref: EdgeReference<'_, ()>|
-     -> String {
-        if cycle_indices.contains(&edge_ref.target()) && cycle_indices.contains(&edge_ref.source())
-        {
-            r#"color=red"#
-        } else {
-            ""
-        }
-        .to_owned()
-    };
+    let get_edge_attributes =
+        |_graph: &Graph<Package, (), Directed, u32>, edge_ref: EdgeReference<'_, ()>| -> String {
+            let source = edge_ref.target();
+            let target = edge_ref.source();
+            if cycle_indices.contains(&target) && cycle_indices.contains(&source) {
+                r#"color=red"#
+            } else {
+                ""
+            }
+            .to_owned()
+        };
     let get_node_attributes =
         |_graph: &Graph<Package, (), Directed, u32>, (idx, pkg): (NodeIndex, &Package)| -> String {
             let label = format!(
