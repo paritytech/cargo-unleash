@@ -2,7 +2,7 @@ use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, Depe
 use cargo::core::{package::Package, Workspace};
 use log::trace;
 use std::collections::HashMap;
-use toml_edit::{Entry, Item, Value};
+use toml_edit::{Item, Value};
 
 fn check_for_update(
     name: String,

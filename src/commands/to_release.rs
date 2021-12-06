@@ -339,7 +339,6 @@ publish = false
 
     #[derive(Default, Debug, Clone)]
     struct WorkspaceBuilder {
-        base: PathBuf,
         krates: Vec<Krate>,
     }
 
