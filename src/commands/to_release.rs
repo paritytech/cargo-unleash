@@ -216,8 +216,8 @@ fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
     let config = &[dot::Config::EdgeNoLabel, dot::Config::NodeNoLabel][..];
     let get_edge_attributes =
         |_graph: &Graph<Package, (), Directed, u32>, edge_ref: EdgeReference<'_, ()>| -> String {
-            let source = edge_ref.target();
-            let target = edge_ref.source();
+            let source = edge_ref.source();
+            let target = edge_ref.target();
             if cycle_indices.contains(&target) && cycle_indices.contains(&source) {
                 r#"color=red"#
             } else {
