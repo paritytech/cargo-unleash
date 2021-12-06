@@ -3,7 +3,6 @@ use cargo::core::{package::Package, Workspace};
 // use log::trace;
 use std::process::Command;
 
-
 pub fn clean_up_unused_dependencies<P>(
     ws: &Workspace<'_>,
     predicate: P,
