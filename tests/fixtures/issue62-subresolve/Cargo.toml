@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    'new-scale-codec',
+    'sidekick',
+    'held',
+]
