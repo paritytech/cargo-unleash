@@ -28,11 +28,8 @@ fn check_proper_resolve() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut cmd = Command::cargo_bin("cargo-unleash")?;
 
-    cmd.arg("--manifest-path")
-        .arg(temp.path())
-        .arg("check");
+    cmd.arg("--manifest-path").arg(temp.path()).arg("check");
     cmd.assert().success().code(0);
     temp.close()?;
     Ok(())
 }
-
