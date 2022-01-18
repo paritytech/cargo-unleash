@@ -23,9 +23,9 @@ gen-readme = ["cargo-readme","lazy_static","sha1"]
 
 [dependencies]
 structopt = "0.3.9"
-toml_edit = "0.10.0"
+toml_edit = "0.13.0"
 log = "0.4.8"
-flexi_logger = "0.20"
+flexi_logger = "0.22"
 petgraph = "0.6"
 regex = "1.4.1"
 anyhow = "1"
