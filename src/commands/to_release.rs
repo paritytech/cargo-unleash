@@ -227,11 +227,7 @@ fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
         };
     let get_node_attributes =
         |_graph: &Graph<Package, (), Directed, u32>, (idx, pkg): (NodeIndex, &Package)| -> String {
-            let label = format!(
-                r#"label="{}:{}" "#,
-                pkg.name(),
-                pkg.version().to_string()
-            );
+            let label = format!(r#"label="{}:{}" "#, pkg.name(), pkg.version().to_string());
             if cycle_indices.contains(&idx) {
                 label + "color=red"
             } else {
