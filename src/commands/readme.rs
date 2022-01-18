@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use cargo::core::{Manifest, Package, Workspace};
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
-use sha1::Sha1;
+use sha1::{Digest as _, Sha1};
 use std::{
     fmt::Display,
     fs::{self, File},
@@ -65,7 +65,7 @@ pub fn check_pkg_readme<'a>(
             let template_path = find_readme_template(&ws.root(), &pkg_path)?;
 
             let new_readme = generate_readme(&pkg_path, &mut pkg_source, template_path)?;
-            if Sha1::from(pkg_readme) == Sha1::from(new_readme) {
+            if Sha1::digest(&pkg_readme) == Sha1::digest(&new_readme) {
                 Ok(())
             } else {
                 bail!(CheckReadmeResult::UpdateNeeded)
