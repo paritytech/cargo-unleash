@@ -180,6 +180,7 @@ _You are using the tooling and want to be mentioned here–[create an issue](htt
  - [Parity Substrate](https://github.com/paritytech/substrate) automatic releasing via [Gitlab CI](https://github.com/paritytech/substrate/blob/master/.gitlab-ci.yml)
  - [Parity SS58-registry](https://github.com/paritytech/ss58-registry) automatic releasing via [Gitlab CI](https://github.com/paritytech/ss58-registry/blob/main/.gitlab-ci.yml)
  - [Juice](https://github.com/spearow/juice)
+ - [fatality](https://github.com/drahnr/fatality)
 
 ## License & Credits
 
