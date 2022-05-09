@@ -31,11 +31,11 @@ regex = "1.4.1"
 anyhow = "1"
 
 # CARGO VERSION BOUND dependencies
-cargo = "0.59.0"
+cargo = "0.61.1"
 flate2 = "1.0.3"
-git2 = "0.13.23"
+git2 = "0.14.2"
 semver = "1.0.3"
-tar = "0.4.35"
+tar = "0.4.36"
 
 # Optional dependencies
 cargo-readme = { version = "3.2", optional = true }
