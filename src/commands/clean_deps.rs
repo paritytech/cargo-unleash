@@ -20,7 +20,7 @@ where
             c.shell().status("Checking", p.name())?;
             let source_path = p.root();
             let root = doc.as_table_mut();
-            Ok(edit_each_dep(root, |p_name, alias, _table| {
+            Ok(edit_each_dep(root, |p_name, alias, _table, _| {
                 let name = alias.unwrap_or(p_name);
                 let found = Command::new("rg")
                     .args(&["--type", "rust"])

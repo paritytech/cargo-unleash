@@ -1,4 +1,4 @@
-use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry};
+use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry, DependencySection};
 use anyhow::Context;
 use cargo::core::{package::Package, Workspace};
 use log::trace;
@@ -10,6 +10,7 @@ fn check_for_update(
     name: String,
     wrap: DependencyEntry<'_>,
     updates: &HashMap<String, Version>,
+    section: DependencySection,
     force_update: bool,
 ) -> DependencyAction {
     let new_version = if let Some(v) = updates.get(&name) {
@@ -37,6 +38,9 @@ fn check_for_update(
                     *v_req = Value::from(format!("{:}", new_version)).decorated(" ", "");
                     return DependencyAction::Mutated;
                 }
+            } else if section == DependencySection::Dev {
+                trace!("No version found on dev dependency, ignoring.");
+                return DependencyAction::Untouched
             } else {
                 // not yet present, we force set.
                 trace!("No version found, setting.");
@@ -65,6 +69,9 @@ fn check_for_update(
                         return DependencyAction::Untouched;
                     }
                     trace!("Versions don't match anymore, updating.");
+                } else if section == DependencySection::Dev {
+                    trace!("No version found on dev dependency, ignoring.");
+                    return DependencyAction::Untouched
                 } else {
                     trace!("No version found, setting.");
                 }
@@ -116,8 +123,8 @@ where
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
-        updates_count += edit_each_dep(root, |a, _, b| {
-            check_for_update(a, b, &updates, force_update)
+        updates_count += edit_each_dep(root, |a, _, b, c| {
+            check_for_update(a, b, &updates, c, force_update)
         });
 
         if let Entry::Occupied(occupied) = root.entry("target") {
@@ -135,8 +142,8 @@ where
 
                 for k in keys {
                     if let Some(Item::Table(root)) = root.get_mut(&k) {
-                        updates_count += edit_each_dep(root, |a, _, b| {
-                            check_for_update(a, b, &updates, force_update)
+                        updates_count += edit_each_dep(root, |a, _, b, c| {
+                            check_for_update(a, b, &updates, c, force_update)
                         });
                     }
                 }
