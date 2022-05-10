@@ -145,7 +145,11 @@ where
 {
     let mut counter = 0;
     let mut removed = Vec::new();
-    for case in [DependencySection::Regular, DependencySection::Dev, DependencySection::Build] {
+    for case in [
+        DependencySection::Regular,
+        DependencySection::Dev,
+        DependencySection::Build,
+    ] {
         let k = case.key();
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
@@ -183,7 +187,10 @@ where
                             (key.clone(), None)
                         }
                     };
-                    (name.clone(), f(name, alias, DependencyEntry::Inline(info), case.clone()))
+                    (
+                        name.clone(),
+                        f(name, alias, DependencyEntry::Inline(info), case.clone()),
+                    )
                 }
                 Some(Item::Table(info)) => {
                     let (name, alias) = {
@@ -199,7 +206,10 @@ where
                         }
                     };
 
-                    (name.clone(), f(name, alias, DependencyEntry::Table(info), case.clone()))
+                    (
+                        name.clone(),
+                        f(name, alias, DependencyEntry::Table(info), case.clone()),
+                    )
                 }
                 None => {
                     continue;

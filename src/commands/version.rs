@@ -1,4 +1,6 @@
-use crate::util::{edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry, DependencySection};
+use crate::util::{
+    edit_each, edit_each_dep, members_deep, DependencyAction, DependencyEntry, DependencySection,
+};
 use anyhow::Context;
 use cargo::core::{package::Package, Workspace};
 use log::trace;
@@ -40,7 +42,7 @@ fn check_for_update(
                 }
             } else if section == DependencySection::Dev {
                 trace!("No version found on dev dependency, ignoring.");
-                return DependencyAction::Untouched
+                return DependencyAction::Untouched;
             } else {
                 // not yet present, we force set.
                 trace!("No version found, setting.");
@@ -71,7 +73,7 @@ fn check_for_update(
                     trace!("Versions don't match anymore, updating.");
                 } else if section == DependencySection::Dev {
                     trace!("No version found on dev dependency, ignoring.");
-                    return DependencyAction::Untouched
+                    return DependencyAction::Untouched;
                 } else {
                     trace!("No version found, setting.");
                 }
