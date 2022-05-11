@@ -72,7 +72,7 @@ fn check_for_update(
                     }
                     trace!("Versions don't match anymore, updating.");
                 } else if section == DependencySection::Dev {
-                    trace!("No version found on dev dependency, ignoring.");
+                    trace!("No version found on dev dependency {:}, ignoring.", name);
                     return DependencyAction::Untouched;
                 } else {
                     trace!("No version found, setting.");
@@ -125,8 +125,8 @@ where
         c.shell().status("Updating", p.name())?;
         let root = doc.as_table_mut();
         let mut updates_count = 0;
-        updates_count += edit_each_dep(root, |a, _, b, c| {
-            check_for_update(a, b, &updates, c, force_update)
+        updates_count += edit_each_dep(root, |name, _, wrap, section| {
+            check_for_update(name, wrap, &updates, section, force_update)
         });
 
         if let Entry::Occupied(occupied) = root.entry("target") {
