@@ -25,7 +25,7 @@ where
                 let found = Command::new("rg")
                     .args(&["--type", "rust"])
                     .arg("-qw")
-                    .arg(name.replace("-", "_"))
+                    .arg(name.replace('-', "_"))
                     .arg(&source_path)
                     .status()
                     .unwrap()
