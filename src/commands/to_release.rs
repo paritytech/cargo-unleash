@@ -208,7 +208,8 @@ fn graphviz<'i, I: IntoIterator<Item = &'i Vec<NodeIndex>>, W: Write>(
     dest: &mut W,
 ) -> anyhow::Result<()> {
     let cycle_indices = cycles
-        .into_iter().flat_map(|y| y.iter())
+        .into_iter()
+        .flat_map(|y| y.iter())
         .copied()
         .collect::<HashSet<_>>();
     let config = &[dot::Config::EdgeNoLabel, dot::Config::NodeNoLabel][..];
