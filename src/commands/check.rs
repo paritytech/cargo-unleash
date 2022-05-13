@@ -183,7 +183,7 @@ fn check_metadata(package: &Package) -> Result<(), anyhow::Error> {
         _ => bad_fields.push("Neither license nor license_file is provided"),
     }
     if metadata.keywords.len() > 5 {
-        bad_fields.push("crates.io allows only up to 5 keywords")
+        bad_fields.push("crates.io only allows up to 5 keywords")
     }
 
     if bad_fields.is_empty() {
