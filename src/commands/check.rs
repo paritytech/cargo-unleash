@@ -124,6 +124,7 @@ fn run_check<'a>(
             local_rustdoc_args: None,
             rustdoc_document_private_items: false,
             honor_rust_version: false,
+            target_rustc_crate_types: None,
         },
         &exec,
     )?;
