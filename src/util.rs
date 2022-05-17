@@ -115,16 +115,42 @@ pub enum DependencyAction {
     Remove,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+/// Which Dependency Section a dependency belongs to
+pub enum DependencySection {
+    /// Just a regular `dependency`
+    Regular,
+    /// A `dev-`dependency
+    Dev,
+    /// A build dependency
+    Build,
+}
+
+impl DependencySection {
+    fn key(&self) -> &'static str {
+        match self {
+            DependencySection::Regular => "dependencies",
+            DependencySection::Dev => "dev-dependencies",
+            DependencySection::Build => "build-dependencies",
+        }
+    }
+}
+
 /// Iterate through the dependency sections of root, find each
 /// dependency entry, that is a subsection and hand it and its name
 /// to f. Return the counter of how many times f returned true.
 pub fn edit_each_dep<F>(root: &mut Table, f: F) -> u32
 where
-    F: Fn(String, Option<String>, DependencyEntry) -> DependencyAction,
+    F: Fn(String, Option<String>, DependencyEntry, DependencySection) -> DependencyAction,
 {
     let mut counter = 0;
     let mut removed = Vec::new();
-    for k in &["dependencies", "dev-dependencies", "build-dependencies"] {
+    for case in [
+        DependencySection::Regular,
+        DependencySection::Dev,
+        DependencySection::Build,
+    ] {
+        let k = case.key();
         let keys = {
             if let Some(Item::Table(t)) = &root.get(k) {
                 t.iter()
@@ -161,7 +187,10 @@ where
                             (key.clone(), None)
                         }
                     };
-                    (name.clone(), f(name, alias, DependencyEntry::Inline(info)))
+                    (
+                        name.clone(),
+                        f(name, alias, DependencyEntry::Inline(info), case.clone()),
+                    )
                 }
                 Some(Item::Table(info)) => {
                     let (name, alias) = {
@@ -177,7 +206,10 @@ where
                         }
                     };
 
-                    (name.clone(), f(name, alias, DependencyEntry::Table(info)))
+                    (
+                        name.clone(),
+                        f(name, alias, DependencyEntry::Table(info), case.clone()),
+                    )
                 }
                 None => {
                     continue;
