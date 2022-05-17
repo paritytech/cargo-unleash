@@ -167,9 +167,6 @@ fn check_dependencies(package: &Package) -> Result<(), anyhow::Error> {
 fn check_metadata(package: &Package) -> Result<(), anyhow::Error> {
     let metadata = package.manifest().metadata();
     let mut bad_fields = Vec::new();
-    if metadata.authors.is_empty() {
-        bad_fields.push("authors is empty")
-    }
     match metadata.description.as_deref() {
         Some("") => bad_fields.push("description is empty"),
         None => bad_fields.push("description is missing"),
@@ -184,6 +181,9 @@ fn check_metadata(package: &Package) -> Result<(), anyhow::Error> {
         (Some(s), None) | (None, Some(s)) if !s.is_empty() => {}
         (Some(_), Some(_)) => bad_fields.push("You can't have license AND license_file"),
         _ => bad_fields.push("Neither license nor license_file is provided"),
+    }
+    if metadata.keywords.len() > 5 {
+        bad_fields.push("crates.io only allows up to 5 keywords")
     }
 
     if bad_fields.is_empty() {
