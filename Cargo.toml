@@ -32,7 +32,7 @@ anyhow = "1"
 
 # CARGO VERSION BOUND dependencies
 cargo = "0.61.1"
-flate2 = "1.0.3"
+flate2 = "1.0.24"
 git2 = "0.14.2"
 semver = "1.0.3"
 tar = "0.4.36"
