@@ -33,6 +33,7 @@ arg_enum! {
 }
 
 #[derive(StructOpt, Debug)]
+#[structopt(setting(ColorAuto), setting(ColoredHelp))]
 pub struct PackageSelectOptions {
 	/// Only use the specfic set of packages
 	///
@@ -73,6 +74,7 @@ pub struct PackageSelectOptions {
 }
 
 #[derive(StructOpt, Debug)]
+#[structopt(setting(ColorAuto), setting(ColoredHelp))]
 pub enum VersionCommand {
 	/// Pick pre-releases and put them to release mode.
 	Release {
@@ -189,6 +191,7 @@ pub enum VersionCommand {
 }
 
 #[derive(StructOpt, Debug)]
+#[structopt(setting(ColorAuto), setting(ColoredHelp))]
 pub enum Command {
 	/// Set a field in all manifests
 	///
