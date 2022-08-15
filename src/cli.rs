@@ -8,7 +8,10 @@ use log::trace;
 use regex::Regex;
 use semver::{BuildMetadata, Prerelease, Version};
 use std::{fs, path::PathBuf, str::FromStr};
-use structopt::{clap::arg_enum, StructOpt};
+use structopt::{
+	clap::{arg_enum, AppSettings::*},
+	StructOpt,
+};
 use toml_edit::Value;
 
 use crate::{commands, util};
@@ -378,6 +381,7 @@ pub enum Command {
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "cargo-unleash", about = "Release the crates of this massiv monorepo")]
+#[structopt(setting(ColorAuto), setting(ColoredHelp))]
 pub struct Opt {
 	/// The path to workspace manifest
 	///
