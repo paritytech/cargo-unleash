@@ -22,20 +22,20 @@ default = []
 gen-readme = ["cargo-readme","lazy_static","sha1"]
 
 [dependencies]
-structopt = "0.3.9"
+structopt = "0.3.26"
 toml_edit = "0.13.0"
-log = "0.4.8"
-flexi_logger = "0.22"
+log = "0.4.17"
+flexi_logger = "0.23.0"
 petgraph = "0.6"
 regex = "1.4.1"
 anyhow = "1"
 
 # CARGO VERSION BOUND dependencies
-cargo = "0.61.1"
-flate2 = "1.0.3"
-git2 = "0.14.2"
-semver = "1.0.3"
-tar = "0.4.36"
+cargo = "0.61"
+flate2 = "1.0.24"
+git2 = "0.14"
+semver = "1.0.13"
+tar = "0.4.38"
 
 # Optional dependencies
 cargo-readme = { version = "3.2", optional = true }
@@ -44,7 +44,7 @@ sha1 = { version = "0.10", optional = true }
 
 [dev-dependencies]
 assert_cmd = "2.0"
-assert_fs = "1.0.1"
+assert_fs = "1.0"
 predicates = "2"
 toml = "0.5"
 itertools = "0.10"
