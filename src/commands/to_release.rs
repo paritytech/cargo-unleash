@@ -380,7 +380,7 @@ publish = false
                 )
                 .collect::<Result<Vec<Manifest>>>()?;
 
-            let vconfig = WorkspaceConfig::Root(WorkspaceRootConfig::new(
+            let root_config = WorkspaceRootConfig::new(
                 base,
                 &Some(
                     manifests
@@ -391,7 +391,10 @@ publish = false
                 &None,
                 &Some(vec![]),
                 &None,
-            ));
+                &None,
+            );
+
+            let vconfig = WorkspaceConfig::Root(root_config);
 
             // crate the filesystem tree
             {
