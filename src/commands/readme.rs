@@ -21,6 +21,7 @@ lazy_static! {
 
 #[derive(Debug)]
 pub enum CheckReadmeResult {
+	#[allow(dead_code)]
 	Skipped,
 	Missing,
 	#[allow(dead_code)]
@@ -180,11 +181,11 @@ fn find_entrypoint(current_dir: &Path) -> Result<File> {
 	let f = File::open(current_dir.join(entrypoint))?;
 	Ok(f)
 }
-#[derive(Debug)]
-struct ManifestLib {
-	pub path: PathBuf,
-	pub doc: bool,
-}
+// #[derive(Debug)]
+// struct ManifestLib {
+// 	pub path: PathBuf,
+// 	pub doc: bool,
+// }
 
 /// Find the default entrypoint to read the doc comments from
 ///

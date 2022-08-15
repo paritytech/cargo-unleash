@@ -5,11 +5,11 @@ authors = ["Benjamin Kampmann <ben@gnunicorn.org>"]
 edition = "2021"
 rust-version = "1.56.1"
 license = "GPL-3.0"
-repository ="https://github.com/gnunicorn/cargo-unleash"
+repository = "https://github.com/gnunicorn/cargo-unleash"
 description = "Tooling to manage releasing of crates in massiv workspaces/monorepos"
 readme = "Readme.md"
 keywords = ["cargo", "publishing", "unleash", "workspaces", "monorepo"]
-categories = ["development-tools", "development-tools::cargo-plugins", ]
+categories = ["development-tools", "development-tools::cargo-plugins"]
 
 exclude = [".gitignore", ".github/**"]
 
@@ -19,7 +19,7 @@ path = "src/main.rs"
 
 [features]
 default = []
-gen-readme = ["cargo-readme","lazy_static","sha1"]
+gen-readme = ["cargo-readme", "lazy_static", "sha1"]
 
 [dependencies]
 structopt = "0.3.26"
