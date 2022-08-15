@@ -30,7 +30,7 @@ pub fn release(
             all_features: false,
             uses_default_features: true,
         },
-        // keep_going: false,
+        keep_going: false,
     };
 
     let delay = {

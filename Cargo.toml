@@ -31,7 +31,7 @@ regex = "1.4.1"
 anyhow = "1"
 
 # CARGO VERSION BOUND dependencies
-cargo = "0.61"
+cargo = "0.62"
 flate2 = "1.0.24"
 git2 = "0.14"
 semver = "1.0.13"

@@ -114,7 +114,7 @@ fn run_check<'a>(
         &ws,
         &ops::CompileOptions {
             build_config: BuildConfig::new(config, opts.jobs, 
-                // false, 
+                false, 
                 &opts.targets, build_mode)?,
             spec: ops::Packages::Packages(Vec::new()),
             cli_features: opts.cli_features.clone(),
@@ -235,7 +235,7 @@ pub fn check<'a>(
             all_features: false,
             uses_default_features: true,
         },
-        // keep_going: false,
+        keep_going: false,
     };
 
     c.shell().status("Checking", "Metadata & Dependencies")?;

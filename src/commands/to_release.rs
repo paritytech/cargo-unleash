@@ -91,12 +91,11 @@ where
         ),
         &Default::default(),
         ws.config(),
-    );
+    ).expect("Failed getting remote registry");
     let lock = ws.config().acquire_package_cache_lock();
 
     registry
-        .update()
-        .expect("Updating from remote registry failed :( .");
+        .invalidate_cache();
 
     for m in members.iter() {
         let dep = Dependency::parse(
@@ -105,11 +104,11 @@ where
             registry.source_id(),
         )
         .expect("Parsing our dependency doesn't fail");
-        registry
+
+        let _ = registry
             .query(&dep, &mut |_| {
                 already_published.insert(m.name());
-            })
-            .expect("Quering the local registry doesn't fail");
+            }).map(|e| e.expect("Quering the local registry doesn't fail"));
     }
 
     // drop the global package lock
