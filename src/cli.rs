@@ -18,7 +18,7 @@ fn parse_regex(src: &str) -> Result<Regex, anyhow::Error> {
 }
 
 arg_enum! {
-	#[derive(Debug, PartialEq)]
+	#[derive(Debug, PartialEq, Eq)]
 	pub enum GenerateReadmeMode {
 		// Generate Readme only if it is missing.
 		IfMissing,
@@ -221,7 +221,6 @@ pub enum Command {
 		cmd: VersionCommand,
 	},
 	/// Add owners for a lot of crates
-	///
 	AddOwner {
 		#[structopt(flatten)]
 		pkg_opts: PackageSelectOptions,

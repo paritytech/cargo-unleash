@@ -101,7 +101,7 @@ pub enum DependencyEntry<'a> {
 	Inline(&'a mut InlineTable),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 /// The action (should be) taken on the dependency entry
 pub enum DependencyAction {
 	/// Ignored, we didn't touch
@@ -112,7 +112,7 @@ pub enum DependencyAction {
 	Remove,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 /// Which Dependency Section a dependency belongs to
 pub enum DependencySection {
 	/// Just a regular `dependency`
@@ -196,9 +196,7 @@ where
 
 					(name.clone(), f(name, alias, DependencyEntry::Table(info), case.clone()))
 				},
-				None => {
-					continue
-				},
+				None => continue,
 				_ => {
 					warn!("Unsupported dependency format");
 					(key, DependencyAction::Untouched)
