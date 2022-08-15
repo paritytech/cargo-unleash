@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-unleash"
-version = "1.0.0-alpha.dev"
+version = "1.0.1-alpha.dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
