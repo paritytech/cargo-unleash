@@ -183,7 +183,7 @@ dependencies = [
  "tar",
  "tempfile",
  "termcolor",
- "toml_edit 0.14.4",
+ "toml_edit",
  "unicode-width",
  "unicode-xid",
  "url",
@@ -238,7 +238,7 @@ dependencies = [
  "structopt",
  "tar",
  "toml",
- "toml_edit 0.13.4",
+ "toml_edit",
 ]
 
 [[package]]
@@ -804,15 +804,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af25a77299a7f711a01975c35a6a424eb6862092cc2d6c72c4ed6cbc56dfc1fa"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "kstring"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b310ccceade8121d7d77fee406160e457c2f4e7c7982d589da3499bc7ea4526"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -1524,18 +1515,6 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "744e9ed5b352340aa47ce033716991b5589e23781acb97cad37d4ea70560f55b"
-dependencies = [
- "combine",
- "indexmap",
- "itertools",
- "kstring 1.0.6",
-]
-
-[[package]]
-name = "toml_edit"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5376256e44f2443f8896ac012507c19a012df0fe8758b55246ae51a2279db51f"
@@ -1543,7 +1522,7 @@ dependencies = [
  "combine",
  "indexmap",
  "itertools",
- "kstring 2.0.0",
+ "kstring",
  "serde",
 ]
 
