@@ -56,7 +56,7 @@ SUBCOMMANDS:
     check          Check whether crates can be packaged
     clean-deps     Check the package(s) for unused dependencies
     de-dev-deps    Deactivate the `[dev-dependencies]`
-    em-dragons     Unleash 'em dragons
+    em-dragons     Unleash ’em dragons
     help           Prints this message or the help of the given subcommand(s)
     rename         Rename a package
     set            Set a field in all manifests
@@ -70,7 +70,7 @@ The main command is `cargo unleash em-dragons`, here is its help. All subcommand
 
 ```bash
 $ cargo-unleash em-dragons --help
-Unleash 'em dragons
+Unleash ’em dragons
 
 Package all selected crates, check them and attempt to publish them.
 
@@ -86,7 +86,7 @@ FLAGS:
         --check-readme
             Generate & verify whether the Readme file has changed.
 
-            When enabled, this will generate a Readme file from the crate's doc comments (using cargo-readme), and check
+            When enabled, this will generate a Readme file from the crate’s doc comments (using cargo-readme), and check
             whether the existing Readme (if any) matches.
         --dry-run
             dry run

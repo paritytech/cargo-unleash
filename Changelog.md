@@ -4,7 +4,8 @@ The format is based on [Keep a Changelog].
 
 [Keep a Changelog]: http://keepachangelog.com/en/1.0.0/
 
-## Unreleased
+## 1.0.0-alpha.14
+- 2022 refresh, add color to the help and upgrade most deps
 - Migrated to 2021 edition, enforcing MSRV of `1.56.1`. [#58](https://github.com/paritytech/cargo-unleash/pull/58)
 - New cli-option for `graphviz`/`dot`-file dependency graph generation [#59](https://github.com/paritytech/cargo-unleash/pull/59)
 - Fix: Handle diamond shaped dependency trees within a workspace [#59](https://github.com/paritytech/cargo-unleash/pull/59)
