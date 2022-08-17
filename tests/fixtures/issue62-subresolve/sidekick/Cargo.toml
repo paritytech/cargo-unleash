@@ -1,0 +1,12 @@
+[package]
+name = "sidekick"
+version = "0.1.0"
+edition = "2021"
+authors = ["example@example.org"]
+license = "MIT"
+repository = "https://github.com/paritytech/cargo-unleash"
+description = "The in between sub-crate needing the features from the semver-compat sub-sub"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+parity-scale-codec-derive = { path = "../new-scale-codec", version = "1.3"}

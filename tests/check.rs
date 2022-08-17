@@ -19,3 +19,17 @@ fn check_include_pre() -> Result<(), Box<dyn std::error::Error>> {
 	temp.close()?;
 	Ok(())
 }
+
+#[test]
+fn check_proper_resolve() -> Result<(), Box<dyn std::error::Error>> {
+    //
+    let temp = assert_fs::TempDir::new()?;
+    temp.copy_from("tests/fixtures/issue62-subresolve", &["*.toml", "*.rs"])?;
+
+    let mut cmd = Command::cargo_bin("cargo-unleash")?;
+
+    cmd.arg("--manifest-path").arg(temp.path()).arg("check");
+    cmd.assert().success().code(0);
+    temp.close()?;
+    Ok(())
+}
