@@ -18,6 +18,25 @@ jobs:
         with:
           toolchain: stable
 
+      - name: get sd
+        uses: robinraju/release-downloader@v1.3
+        with:
+          repository: "chmln/sd"
+          tag: "v0.7.6"
+          fileName: "sd-v0.7.6-x86_64-unknown-linux-musl"
+
+        run: |
+          mkdir -pv ${GITHUB_WORKSPACE}/bin
+          mv -v sd-v0.7.6-x86_64-unknown-linux-musl ${GITHUB_WORKSPACE}/bin/sd
+          echo "::add-path::${GITHUB_WORKSPACE}/bin"
+          chmod +x "${GITHUB_WORKSPACE}/bin/sd"
+
+      - name: set version to tag version
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: --release -- version set $(git tag --contains HEAD --format='%(refname)' | sd '^refs/tags/v([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9]+(?:\.[0-9]+)?)?)$' '$1' )
+
       - name: Deploy by self
         uses: actions-rs/cargo@v1
 
