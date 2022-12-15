@@ -1,7 +1,7 @@
 [package]
 name = "cargo-unleash"
 version = "1.0.0-alpha.14"
-authors = ["Benjamin Kampmann <ben@gnunicorn.org>"]
+authors = ["Benjamin Kampmann <ben@gnunicorn.org>", "Bernhard Schuster <bernhard@ahoi.io>"]
 edition = "2021"
 rust-version = "1.56.1"
 license = "GPL-3.0"
