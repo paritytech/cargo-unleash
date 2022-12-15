@@ -94,7 +94,7 @@ where
 			.expect("Parsing our dependency doesn't fail");
 
 		let _ = registry
-			.query(&dep, &mut |_| {
+			.query(&dep, cargo::core::QueryKind::Exact,  &mut |_| {
 				already_published.insert(m.name());
 			})
 			.map(|e| e.expect("Quering the local registry doesn't fail"));
